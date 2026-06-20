@@ -407,8 +407,8 @@
         <span class="drag-handle" title="Drag to reorder">⠿</span>
         <input type="text" class="option-name-input" value="${escapeHtml(opt.name)}">
         ${cfg.hasColor ? `
-          <button type="button" class="icon-btn color-btn bucket-btn" title="Background color" style="background:${opt.bg_color || 'transparent'}">🪣</button>
-          <button type="button" class="icon-btn color-btn text-btn" title="Text color" style="color:${opt.text_color || 'inherit'}">T</button>
+          <button type="button" class="icon-btn color-btn bucket-btn" title="Background color" style="background:${opt.bg_color || 'transparent'}"><i class="fa-solid fa-fill-drip"></i></button>
+          <button type="button" class="icon-btn color-btn text-btn" title="Text color" style="color:${opt.text_color || 'inherit'}"><i class="fa-solid fa-font"></i></button>
         ` : ''}
         <button class="icon-btn delete-option-btn" title="Delete">✕</button>
       `;

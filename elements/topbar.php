@@ -1,5 +1,5 @@
 <header class="topbar">
-  <h1>Daybook</h1>
+  <img src="/assets/images/logo_horiz-header.png" alt="Daybook Logo" class="logo-header">
   <div class="topbar-controls">
     <label>Project
       <select id="project-select"></select>
