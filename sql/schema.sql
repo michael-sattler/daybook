@@ -4,10 +4,12 @@
 CREATE TABLE IF NOT EXISTS projects (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
+  slug VARCHAR(150) NOT NULL,
   sort_order INT NOT NULL DEFAULT 0,
   bg_color VARCHAR(7) NULL,
   text_color VARCHAR(7) NULL,
-  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_projects_slug (slug)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS categories (
@@ -95,8 +97,8 @@ INSERT INTO statuses (name, sort_order, bg_color, text_color) VALUES
   ('BLOCKED', 5, '#fecaca', '#7f1d1d');
 
 -- Projects: first pastel ROYGBIV swatch
-INSERT INTO projects (name, sort_order, bg_color, text_color) VALUES
-  ('General', 1, '#ffd6d6', '#7a2e2e');
+INSERT INTO projects (name, slug, sort_order, bg_color, text_color) VALUES
+  ('General', 'general', 1, '#ffd6d6', '#7a2e2e');
 
 -- Categories: no color treatment (plain)
 INSERT INTO categories (project_id, name, sort_order) VALUES

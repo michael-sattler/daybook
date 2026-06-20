@@ -1,12 +1,13 @@
 <?php
 require_once __DIR__ . '/../includes/api_common.php';
 require_once __DIR__ . '/../includes/color_palettes.php';
+require_once __DIR__ . '/../includes/slug.php';
 
 $pdo = db();
 $method = $_SERVER['REQUEST_METHOD'];
 
 if ($method === 'GET') {
-    $rows = $pdo->query('SELECT id, name, sort_order, bg_color, text_color FROM projects ORDER BY sort_order, id')->fetchAll();
+    $rows = $pdo->query('SELECT id, name, slug, sort_order, bg_color, text_color FROM projects ORDER BY sort_order, id')->fetchAll();
     respond($rows);
 }
 
@@ -22,11 +23,13 @@ if ($method === 'POST') {
         [$bg, $text] = PASTEL_ROYGBIV_PALETTE[$count % count(PASTEL_ROYGBIV_PALETTE)];
     }
 
-    $stmt = $pdo->prepare('INSERT INTO projects (name, sort_order, bg_color, text_color) VALUES (?,?,?,?)');
-    $stmt->execute([$name, $maxOrder + 1, $bg, $text]);
+    $slug = unique_project_slug($pdo, slugify($name));
+
+    $stmt = $pdo->prepare('INSERT INTO projects (name, slug, sort_order, bg_color, text_color) VALUES (?,?,?,?,?)');
+    $stmt->execute([$name, $slug, $maxOrder + 1, $bg, $text]);
     $id = (int)$pdo->lastInsertId();
     seed_project_defaults($pdo, $id);
-    respond(['id' => $id, 'name' => $name, 'sort_order' => $maxOrder + 1, 'bg_color' => $bg, 'text_color' => $text], 201);
+    respond(['id' => $id, 'name' => $name, 'slug' => $slug, 'sort_order' => $maxOrder + 1, 'bg_color' => $bg, 'text_color' => $text], 201);
 }
 
 if ($method === 'PUT') {

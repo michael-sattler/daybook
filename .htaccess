@@ -1,0 +1,22 @@
+RewriteEngine On
+RewriteBase /
+
+# Serve real files/directories directly (assets, images, and .php files if
+# requested by their literal path - kept working for backward compatibility).
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# / -> index.php
+RewriteRule ^$ index.php [L]
+
+# /projects/{slug} -> index.php?project_slug={slug}
+RewriteRule ^projects/([a-z0-9-]+)/?$ index.php?project_slug=$1 [L,QSA]
+
+# /api/{name} -> api/{name}.php
+RewriteCond %{DOCUMENT_ROOT}/api/$1.php -f
+RewriteRule ^api/([a-zA-Z0-9_-]+)/?$ api/$1.php [L,QSA]
+
+# /{page} -> {page}.php  (login, logout, etc.)
+RewriteCond %{DOCUMENT_ROOT}/$1.php -f
+RewriteRule ^([a-zA-Z0-9_-]+)/?$ $1.php [L,QSA]

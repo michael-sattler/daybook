@@ -1,2 +1,4 @@
 includes/config.local.php
+includes/config.production.php
+includes/config.*.php
 .DS_Store

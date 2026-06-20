@@ -88,5 +88,7 @@ ob_start();
 <div id="toast" class="toast hidden"></div>
 <?php
 $content = ob_get_clean();
-$pageScripts = '<script src="/assets/js/app.js"></script>';
+$initialProjectSlug = htmlspecialchars($_GET['project_slug'] ?? '', ENT_QUOTES);
+$pageScripts = "<script>window.INITIAL_PROJECT_SLUG = \"{$initialProjectSlug}\";</script>"
+    . '<script src="/assets/js/app.js"></script>';
 include __DIR__ . '/elements/layout.php';

@@ -4,7 +4,7 @@ require_once __DIR__ . '/includes/auth.php';
 $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (attempt_login($_POST['password'] ?? '')) {
-        header('Location: /index.php');
+        header('Location: /');
         exit;
     }
     $error = 'Incorrect password.';

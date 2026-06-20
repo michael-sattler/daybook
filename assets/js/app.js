@@ -42,7 +42,7 @@
       ...options,
     });
     if (res.status === 401) {
-      window.location.href = '/login.php';
+      window.location.href = '/login';
       return;
     }
     const text = await res.text();
@@ -92,25 +92,35 @@
   // ---------- bootstrap ----------
 
   async function init() {
-    state.projects = await get('/api/projects.php');
+    state.projects = await get('/api/projects');
     if (!state.projects.length) {
-      const created = await post('/api/projects.php', { name: 'General' });
+      const created = await post('/api/projects', { name: 'General' });
       state.projects = [created];
     }
-    state.currentProjectId = state.projects[0].id;
+    const requestedSlug = window.INITIAL_PROJECT_SLUG || '';
+    const matched = requestedSlug && state.projects.find((p) => p.slug === requestedSlug);
+    const initialProject = matched || state.projects[0];
+    state.currentProjectId = initialProject.id;
+    pushProjectUrl(initialProject);
     renderProjectSelect();
     await loadProjectScopedLists();
     await loadItems();
     bindGlobalEvents();
   }
 
+  function pushProjectUrl(project) {
+    if (!project || !project.slug) return;
+    const url = `/projects/${project.slug}`;
+    if (window.location.pathname !== url) window.history.pushState({}, '', url);
+  }
+
   async function loadProjectScopedLists() {
     const pid = state.currentProjectId;
     [state.categories, state.subsystems, state.priorities, state.statuses] = await Promise.all([
-      get(`/api/categories.php?project_id=${pid}`),
-      get(`/api/subsystems.php?project_id=${pid}`),
-      get(`/api/priorities.php?project_id=${pid}`),
-      get('/api/statuses.php'),
+      get(`/api/categories?project_id=${pid}`),
+      get(`/api/subsystems?project_id=${pid}`),
+      get(`/api/priorities?project_id=${pid}`),
+      get('/api/statuses'),
     ]);
     renderFilterSelects();
   }
@@ -123,7 +133,7 @@
     if (state.filters.category_id) params.set('category_id', state.filters.category_id);
     if (state.filters.priority_id) params.set('priority_id', state.filters.priority_id);
     if (state.filters.status_id) params.set('status_id', state.filters.status_id);
-    state.items = await get('/api/items.php?' + params.toString());
+    state.items = await get('/api/items?' + params.toString());
     renderItems();
   }
 
@@ -170,7 +180,7 @@
           .filter((tr) => tr.dataset.priorityId === priorityId)
           .map((tr) => tr.dataset.id);
         try {
-          await patch('/api/items.php', { priority_id: Number(priorityId), order: ids });
+          await patch('/api/items', { priority_id: Number(priorityId), order: ids });
         } catch (e) {
           toast(e.message, true);
         }
@@ -256,7 +266,7 @@
     tr.querySelector('.delete-item-btn').addEventListener('click', async () => {
       if (!confirm('Delete this item?')) return;
       try {
-        await del(`/api/items.php?id=${item.id}`);
+        await del(`/api/items?id=${item.id}`);
         await loadItems();
       } catch (e) {
         toast(e.message, true);
@@ -270,7 +280,7 @@
 
   async function saveItemField(itemId, field, value) {
     try {
-      const updated = await put('/api/items.php', { id: itemId, [field]: value });
+      const updated = await put('/api/items', { id: itemId, [field]: value });
       const idx = state.items.findIndex((i) => i.id === itemId);
       if (idx !== -1) state.items[idx] = updated;
       // priority/project changes can shift ordering/filters - re-render fully to stay correct
@@ -292,6 +302,18 @@
   function bindGlobalEvents() {
     document.getElementById('project-select').addEventListener('change', async (e) => {
       state.currentProjectId = Number(e.target.value);
+      pushProjectUrl(state.projects.find((p) => p.id === state.currentProjectId));
+      await loadProjectScopedLists();
+      await loadItems();
+    });
+
+    window.addEventListener('popstate', async () => {
+      const match = window.location.pathname.match(/^\/projects\/([a-z0-9-]+)\/?$/);
+      const slug = match ? match[1] : '';
+      const project = (slug && state.projects.find((p) => p.slug === slug)) || state.projects[0];
+      if (!project || project.id === state.currentProjectId) return;
+      state.currentProjectId = project.id;
+      renderProjectSelect();
       await loadProjectScopedLists();
       await loadItems();
     });
@@ -304,7 +326,7 @@
 
     document.getElementById('add-item-btn').addEventListener('click', async () => {
       try {
-        const created = await post('/api/items.php', { project_id: state.currentProjectId, item_text: '' });
+        const created = await post('/api/items', { project_id: state.currentProjectId, item_text: '' });
         await loadItems();
         const row = document.querySelector(`tr[data-id="${created.id}"]`);
         if (row) row.querySelector('textarea[data-field="item_text"]').focus();
@@ -351,11 +373,11 @@
   // ---------- option list modals (categories / subsystems / priorities / statuses / projects) ----------
 
   const OPTION_CONFIG = {
-    categories: { endpoint: '/api/categories.php', title: 'Manage Categories', projectScoped: true, hasColor: false },
-    subsystems: { endpoint: '/api/subsystems.php', title: 'Manage Subsystems', projectScoped: true, hasColor: true },
-    priorities: { endpoint: '/api/priorities.php', title: 'Manage Priorities', projectScoped: true, hasColor: true },
-    statuses: { endpoint: '/api/statuses.php', title: 'Manage Statuses', projectScoped: false, hasColor: true },
-    projects: { endpoint: '/api/projects.php', title: 'Manage Projects', projectScoped: false, hasColor: true },
+    categories: { endpoint: '/api/categories', title: 'Manage Categories', projectScoped: true, hasColor: false },
+    subsystems: { endpoint: '/api/subsystems', title: 'Manage Subsystems', projectScoped: true, hasColor: true },
+    priorities: { endpoint: '/api/priorities', title: 'Manage Priorities', projectScoped: true, hasColor: true },
+    statuses: { endpoint: '/api/statuses', title: 'Manage Statuses', projectScoped: false, hasColor: true },
+    projects: { endpoint: '/api/projects', title: 'Manage Projects', projectScoped: false, hasColor: true },
   };
   let currentOptionType = null;
 
@@ -453,6 +475,7 @@
             state.projects = state.projects.filter((p) => p.id !== opt.id);
             if (state.currentProjectId === opt.id) {
               state.currentProjectId = state.projects[0] ? state.projects[0].id : null;
+              pushProjectUrl(state.projects[0]);
               await loadProjectScopedLists();
               await loadItems();
             }
@@ -542,7 +565,7 @@
       const url = document.getElementById('detail-doc-url');
       if (!url.value.trim()) return;
       try {
-        await post('/api/docs.php', { item_id: state.detailItemId, label: label.value.trim(), url: url.value.trim() });
+        await post('/api/docs', { item_id: state.detailItemId, label: label.value.trim(), url: url.value.trim() });
         label.value = '';
         url.value = '';
         await renderDocsList();
@@ -556,7 +579,7 @@
       const body = document.getElementById('detail-note-body');
       if (!body.value.trim()) return;
       try {
-        await post('/api/notes.php', { item_id: state.detailItemId, body: body.value.trim() });
+        await post('/api/notes', { item_id: state.detailItemId, body: body.value.trim() });
         body.value = '';
         await renderNotesList();
       } catch (err) {
@@ -566,7 +589,7 @@
   }
 
   async function renderDocsList() {
-    const docs = await get(`/api/docs.php?item_id=${state.detailItemId}`);
+    const docs = await get(`/api/docs?item_id=${state.detailItemId}`);
     const ul = document.getElementById('detail-docs-list');
     ul.innerHTML = '';
     for (const d of docs) {
@@ -576,7 +599,7 @@
         <button class="icon-btn delete-doc-btn" title="Delete">✕</button>
       `;
       li.querySelector('.delete-doc-btn').addEventListener('click', async () => {
-        await del(`/api/docs.php?id=${d.id}`);
+        await del(`/api/docs?id=${d.id}`);
         await renderDocsList();
       });
       ul.appendChild(li);
@@ -585,7 +608,7 @@
   }
 
   async function renderNotesList() {
-    const notes = await get(`/api/notes.php?item_id=${state.detailItemId}`);
+    const notes = await get(`/api/notes?item_id=${state.detailItemId}`);
     const ul = document.getElementById('detail-notes-list');
     ul.innerHTML = '';
     for (const n of notes) {
@@ -600,14 +623,14 @@
       textarea.addEventListener('blur', async () => {
         if (textarea.value.trim() === n.body) return;
         try {
-          await put('/api/notes.php', { id: n.id, body: textarea.value.trim() });
+          await put('/api/notes', { id: n.id, body: textarea.value.trim() });
           toast('Note saved');
         } catch (err) {
           toast(err.message, true);
         }
       });
       li.querySelector('.delete-note-btn').addEventListener('click', async () => {
-        await del(`/api/notes.php?id=${n.id}`);
+        await del(`/api/notes?id=${n.id}`);
         await renderNotesList();
       });
       ul.appendChild(li);
