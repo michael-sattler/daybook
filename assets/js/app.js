@@ -2,9 +2,29 @@
 (function () {
   'use strict';
 
+  const COMMON_COLOR_SWATCHES = [
+    '#ffffff', '#f3f4f6', '#e5e7eb', '#9ca3af', '#4b5563', '#1f2937', '#000000',
+    '#fecaca', '#fca5a5', '#dc2626', '#7f1d1d',
+    '#fed7aa', '#fb923c', '#c2410c',
+    '#fef08a', '#facc15', '#a16207',
+    '#bbf7d0', '#4ade80', '#15803d',
+    '#bfdbfe', '#60a5fa', '#1d4ed8',
+    '#ddd6fe', '#a78bfa', '#5b21b6',
+    '#fbcfe8', '#f472b6', '#9d174d',
+  ];
+
+  // Maps an item field to the option list + grid render style used to colorize it.
+  const FIELD_COLOR_CONFIG = {
+    subsystem_id: { list: 'subsystems', mode: 'pill' },
+    project_id: { list: 'projects', mode: 'pill' },
+    status_id: { list: 'statuses', mode: 'pill' },
+    priority_id: { list: 'priorities', mode: 'fill-cell' },
+  };
+
   const state = {
     projects: [],
     categories: [],
+    subsystems: [],
     priorities: [],
     statuses: [],
     items: [],
@@ -86,8 +106,9 @@
 
   async function loadProjectScopedLists() {
     const pid = state.currentProjectId;
-    [state.categories, state.priorities, state.statuses] = await Promise.all([
+    [state.categories, state.subsystems, state.priorities, state.statuses] = await Promise.all([
       get(`/api/categories.php?project_id=${pid}`),
+      get(`/api/subsystems.php?project_id=${pid}`),
       get(`/api/priorities.php?project_id=${pid}`),
       get('/api/statuses.php'),
     ]);
@@ -127,42 +148,29 @@
   function renderItems() {
     const tbody = document.getElementById('items-tbody');
     tbody.innerHTML = '';
-
-    if (state.orderBy === 'priority') {
-      const groups = new Map();
-      for (const it of state.items) {
-        const key = it.priority_id || 'none';
-        if (!groups.has(key)) groups.set(key, []);
-        groups.get(key).push(it);
-      }
-      for (const [key, rows] of groups) {
-        const label = key === 'none' ? '(No Priority)' : (rows[0].priority_name || '(No Priority)');
-        const headerRow = document.createElement('tr');
-        headerRow.className = 'priority-group-header';
-        headerRow.innerHTML = `<td colspan="12">${escapeHtml(label)}</td>`;
-        tbody.appendChild(headerRow);
-
-        const groupBody = document.createElement('tbody');
-        groupBody.className = 'priority-group';
-        groupBody.dataset.priorityId = key === 'none' ? '' : key;
-        for (const item of rows) groupBody.appendChild(buildRow(item));
-        tbody.appendChild(groupBody);
-
-        if (key !== 'none') makeSortable(groupBody);
-      }
-    } else {
-      for (const item of state.items) tbody.appendChild(buildRow(item));
-    }
+    for (const item of state.items) tbody.appendChild(buildRow(item));
+    if (state.orderBy === 'priority') makeSortable(tbody);
   }
 
-  function makeSortable(groupBody) {
-    Sortable.create(groupBody, {
+  function makeSortable(tbody) {
+    Sortable.create(tbody, {
       animation: 150,
       handle: '.drag-handle',
-      onEnd: async () => {
-        const ids = Array.from(groupBody.children).map((tr) => tr.dataset.id);
+      // Dragging is confined to rows that share the same priority - crossing into
+      // a different priority's block is rejected so "Order" only ever reorders
+      // within one priority bucket.
+      onMove: (evt) => {
+        if (!evt.related || !evt.related.dataset) return true;
+        return evt.dragged.dataset.priorityId === evt.related.dataset.priorityId;
+      },
+      onEnd: async (evt) => {
+        const priorityId = evt.item.dataset.priorityId;
+        if (!priorityId) return;
+        const ids = Array.from(tbody.children)
+          .filter((tr) => tr.dataset.priorityId === priorityId)
+          .map((tr) => tr.dataset.id);
         try {
-          await patch('/api/items.php', { priority_id: Number(groupBody.dataset.priorityId), order: ids });
+          await patch('/api/items.php', { priority_id: Number(priorityId), order: ids });
         } catch (e) {
           toast(e.message, true);
         }
@@ -173,11 +181,12 @@
   function buildRow(item) {
     const tr = document.createElement('tr');
     tr.dataset.id = item.id;
+    tr.dataset.priorityId = item.priority_id || '';
 
     tr.innerHTML = `
       <td class="col-sort">${item.sort_order}</td>
       <td class="col-category"><select data-field="category_id">${optionsHtml(state.categories, item.category_id)}</select></td>
-      <td class="col-subsystem"><input type="text" data-field="subsystem" value="${escapeHtml(item.subsystem)}"></td>
+      <td class="col-subsystem"><select data-field="subsystem_id">${optionsHtml(state.subsystems, item.subsystem_id)}</select></td>
       <td class="col-item"><textarea data-field="item_text" rows="1">${escapeHtml(item.item_text)}</textarea></td>
       <td class="col-url"><input type="text" data-field="url" value="${escapeHtml(item.url)}"></td>
       <td class="col-project"><select data-field="project_id">${optionsHtml(state.projects, item.project_id, '')}</select></td>
@@ -191,7 +200,30 @@
 
     bindRowEvents(tr, item);
     autoResizeTextarea(tr.querySelector('textarea[data-field="item_text"]'));
+
+    for (const [field, cfg] of Object.entries(FIELD_COLOR_CONFIG)) {
+      const sel = tr.querySelector(`select[data-field="${field}"]`);
+      paintColorSelect(sel, state[cfg.list], sel.value, cfg.mode);
+    }
     return tr;
+  }
+
+  function paintColorSelect(selectEl, list, selectedId, mode) {
+    if (!selectEl) return;
+    const opt = list.find((o) => String(o.id) === String(selectedId));
+    const bg = (opt && opt.bg_color) || '';
+    const text = (opt && opt.text_color) || '';
+    const cell = selectEl.closest('td');
+    if (mode === 'fill-cell') {
+      if (cell) { cell.style.backgroundColor = bg; cell.style.color = text; }
+      selectEl.style.backgroundColor = 'transparent';
+      selectEl.style.color = text;
+      selectEl.classList.remove('color-pill');
+    } else {
+      selectEl.style.backgroundColor = bg;
+      selectEl.style.color = text;
+      selectEl.classList.toggle('color-pill', !!bg);
+    }
   }
 
   function autoResizeTextarea(ta) {
@@ -205,7 +237,12 @@
     const debouncedSave = debounce((field, value) => saveItemField(item.id, field, value), 500);
 
     tr.querySelectorAll('select[data-field]').forEach((el) => {
-      el.addEventListener('change', () => saveItemField(item.id, el.dataset.field, el.value));
+      el.addEventListener('change', () => {
+        saveItemField(item.id, el.dataset.field, el.value);
+        const colorCfg = FIELD_COLOR_CONFIG[el.dataset.field];
+        if (colorCfg) paintColorSelect(el, state[colorCfg.list], el.value, colorCfg.mode);
+        if (el.dataset.field === 'priority_id') tr.dataset.priorityId = el.value || '';
+      });
     });
     tr.querySelectorAll('input[data-field]').forEach((el) => {
       el.addEventListener('input', () => debouncedSave(el.dataset.field, el.value));
@@ -236,7 +273,7 @@
       const updated = await put('/api/items.php', { id: itemId, [field]: value });
       const idx = state.items.findIndex((i) => i.id === itemId);
       if (idx !== -1) state.items[idx] = updated;
-      // priority/project changes can shift grouping/filters - re-render fully to stay correct
+      // priority/project changes can shift ordering/filters - re-render fully to stay correct
       if (field === 'priority_id' || field === 'project_id') {
         if (field === 'project_id' && Number(value) !== state.currentProjectId) {
           await loadItems();
@@ -302,21 +339,23 @@
     });
 
     document.getElementById('manage-categories-btn').addEventListener('click', () => openOptionModal('categories'));
+    document.getElementById('manage-subsystems-btn').addEventListener('click', () => openOptionModal('subsystems'));
     document.getElementById('manage-priorities-btn').addEventListener('click', () => openOptionModal('priorities'));
     document.getElementById('manage-statuses-btn').addEventListener('click', () => openOptionModal('statuses'));
-    document.getElementById('manage-projects-btn').addEventListener('click', openProjectModal);
+    document.getElementById('manage-projects-btn').addEventListener('click', () => openOptionModal('projects'));
 
     document.getElementById('option-modal-close').addEventListener('click', closeOptionModal);
-    document.getElementById('project-modal-close').addEventListener('click', closeProjectModal);
     document.getElementById('detail-modal-close').addEventListener('click', closeDetailModal);
   }
 
-  // ---------- option list modals (categories / priorities / statuses) ----------
+  // ---------- option list modals (categories / subsystems / priorities / statuses / projects) ----------
 
   const OPTION_CONFIG = {
-    categories: { endpoint: '/api/categories.php', title: 'Manage Categories', projectScoped: true },
-    priorities: { endpoint: '/api/priorities.php', title: 'Manage Priorities', projectScoped: true },
-    statuses: { endpoint: '/api/statuses.php', title: 'Manage Statuses', projectScoped: false },
+    categories: { endpoint: '/api/categories.php', title: 'Manage Categories', projectScoped: true, hasColor: false },
+    subsystems: { endpoint: '/api/subsystems.php', title: 'Manage Subsystems', projectScoped: true, hasColor: true },
+    priorities: { endpoint: '/api/priorities.php', title: 'Manage Priorities', projectScoped: true, hasColor: true },
+    statuses: { endpoint: '/api/statuses.php', title: 'Manage Statuses', projectScoped: false, hasColor: true },
+    projects: { endpoint: '/api/projects.php', title: 'Manage Projects', projectScoped: false, hasColor: true },
   };
   let currentOptionType = null;
 
@@ -336,8 +375,9 @@
       const body = { name };
       if (cfg.projectScoped) body.project_id = state.currentProjectId;
       try {
-        await post(cfg.endpoint, body);
+        const created = await post(cfg.endpoint, body);
         input.value = '';
+        if (type === 'projects') state.projects.push(created);
         await refreshOptionList(type);
         renderOptionModalList();
       } catch (err) {
@@ -346,14 +386,11 @@
     };
   }
 
-  function listForType(type) {
-    return state[type];
-  }
-
   async function refreshOptionList(type) {
     const cfg = OPTION_CONFIG[type];
     const url = cfg.projectScoped ? `${cfg.endpoint}?project_id=${state.currentProjectId}` : cfg.endpoint;
     state[type] = await get(url);
+    if (type === 'projects') renderProjectSelect();
     renderFilterSelects();
     renderItems();
   }
@@ -361,7 +398,7 @@
   function renderOptionModalList() {
     const cfg = OPTION_CONFIG[currentOptionType];
     const ul = document.getElementById('option-modal-list');
-    const list = listForType(currentOptionType);
+    const list = state[currentOptionType];
     ul.innerHTML = '';
     for (const opt of list) {
       const li = document.createElement('li');
@@ -369,6 +406,10 @@
       li.innerHTML = `
         <span class="drag-handle" title="Drag to reorder">⠿</span>
         <input type="text" class="option-name-input" value="${escapeHtml(opt.name)}">
+        ${cfg.hasColor ? `
+          <button type="button" class="icon-btn color-btn bucket-btn" title="Background color" style="background:${opt.bg_color || 'transparent'}">🪣</button>
+          <button type="button" class="icon-btn color-btn text-btn" title="Text color" style="color:${opt.text_color || 'inherit'}">T</button>
+        ` : ''}
         <button class="icon-btn delete-option-btn" title="Delete">✕</button>
       `;
       li.querySelector('.option-name-input').addEventListener('change', async (e) => {
@@ -379,10 +420,44 @@
           toast(err.message, true);
         }
       });
+      if (cfg.hasColor) {
+        li.querySelector('.bucket-btn').addEventListener('click', (e) => {
+          openColorPicker(e.currentTarget, opt.bg_color, async (hex) => {
+            try {
+              await put(cfg.endpoint, { id: opt.id, bg_color: hex });
+              await refreshOptionList(currentOptionType);
+              renderOptionModalList();
+            } catch (err) {
+              toast(err.message, true);
+            }
+          });
+        });
+        li.querySelector('.text-btn').addEventListener('click', (e) => {
+          openColorPicker(e.currentTarget, opt.text_color, async (hex) => {
+            try {
+              await put(cfg.endpoint, { id: opt.id, text_color: hex });
+              await refreshOptionList(currentOptionType);
+              renderOptionModalList();
+            } catch (err) {
+              toast(err.message, true);
+            }
+          });
+        });
+      }
       li.querySelector('.delete-option-btn').addEventListener('click', async () => {
-        if (!confirm(`Delete "${opt.name}"? Items using it will be cleared to blank.`)) return;
+        const extra = currentOptionType === 'projects' ? ' and all its items' : '';
+        if (!confirm(`Delete "${opt.name}"${extra}?`)) return;
         try {
           await del(`${cfg.endpoint}?id=${opt.id}`);
+          if (currentOptionType === 'projects') {
+            state.projects = state.projects.filter((p) => p.id !== opt.id);
+            if (state.currentProjectId === opt.id) {
+              state.currentProjectId = state.projects[0] ? state.projects[0].id : null;
+              await loadProjectScopedLists();
+              await loadItems();
+            }
+            renderProjectSelect();
+          }
           await refreshOptionList(currentOptionType);
           renderOptionModalList();
         } catch (err) {
@@ -410,70 +485,47 @@
     document.getElementById('option-modal').classList.add('hidden');
   }
 
-  // ---------- project modal ----------
+  // ---------- color picker popover ----------
 
-  function openProjectModal() {
-    renderProjectModalList();
-    document.getElementById('project-modal').classList.remove('hidden');
+  function openColorPicker(anchorEl, currentColor, onPick) {
+    document.querySelectorAll('.color-picker-popover').forEach((p) => p.remove());
 
-    const form = document.getElementById('project-modal-add-form');
-    form.onsubmit = async (e) => {
-      e.preventDefault();
-      const input = document.getElementById('project-modal-new-name');
-      const name = input.value.trim();
-      if (!name) return;
-      try {
-        const created = await post('/api/projects.php', { name });
-        state.projects.push(created);
-        input.value = '';
-        renderProjectModalList();
-        renderProjectSelect();
-      } catch (err) {
-        toast(err.message, true);
+    const pop = document.createElement('div');
+    pop.className = 'color-picker-popover';
+    pop.innerHTML = `
+      <div class="color-swatch-grid">
+        ${COMMON_COLOR_SWATCHES.map((c) => `<button type="button" class="color-swatch" data-color="${c}" style="background:${c}"></button>`).join('')}
+      </div>
+      <div class="color-picker-custom">
+        <input type="color" value="${currentColor || '#ffffff'}">
+        <button type="button" class="clear-color-btn link-btn">Clear</button>
+      </div>
+    `;
+    document.body.appendChild(pop);
+
+    const rect = anchorEl.getBoundingClientRect();
+    pop.style.position = 'fixed';
+    pop.style.top = `${rect.bottom + 4}px`;
+    pop.style.left = `${rect.left}px`;
+
+    pop.querySelectorAll('.color-swatch').forEach((btn) => {
+      btn.addEventListener('click', () => { onPick(btn.dataset.color); pop.remove(); });
+    });
+    pop.querySelector('input[type="color"]').addEventListener('change', (e) => {
+      onPick(e.target.value);
+      pop.remove();
+    });
+    pop.querySelector('.clear-color-btn').addEventListener('click', () => { onPick(''); pop.remove(); });
+
+    setTimeout(() => {
+      document.addEventListener('click', closeOnOutsideClick);
+    }, 0);
+    function closeOnOutsideClick(e) {
+      if (!pop.contains(e.target) && e.target !== anchorEl) {
+        pop.remove();
+        document.removeEventListener('click', closeOnOutsideClick);
       }
-    };
-  }
-
-  function renderProjectModalList() {
-    const ul = document.getElementById('project-modal-list');
-    ul.innerHTML = '';
-    for (const proj of state.projects) {
-      const li = document.createElement('li');
-      li.innerHTML = `
-        <input type="text" class="option-name-input" value="${escapeHtml(proj.name)}">
-        <button class="icon-btn delete-option-btn" title="Delete">✕</button>
-      `;
-      li.querySelector('.option-name-input').addEventListener('change', async (e) => {
-        try {
-          await put('/api/projects.php', { id: proj.id, name: e.target.value.trim() });
-          proj.name = e.target.value.trim();
-          renderProjectSelect();
-        } catch (err) {
-          toast(err.message, true);
-        }
-      });
-      li.querySelector('.delete-option-btn').addEventListener('click', async () => {
-        if (!confirm(`Delete project "${proj.name}" and all its items?`)) return;
-        try {
-          await del(`/api/projects.php?id=${proj.id}`);
-          state.projects = state.projects.filter((p) => p.id !== proj.id);
-          if (state.currentProjectId === proj.id) {
-            state.currentProjectId = state.projects[0] ? state.projects[0].id : null;
-            await loadProjectScopedLists();
-            await loadItems();
-          }
-          renderProjectModalList();
-          renderProjectSelect();
-        } catch (err) {
-          toast(err.message, true);
-        }
-      });
-      ul.appendChild(li);
     }
-  }
-
-  function closeProjectModal() {
-    document.getElementById('project-modal').classList.add('hidden');
   }
 
   // ---------- detail modal (docs + notes) ----------

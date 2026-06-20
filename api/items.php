@@ -5,20 +5,26 @@ $pdo = db();
 $method = $_SERVER['REQUEST_METHOD'];
 
 const EDITABLE_FIELDS = [
-    'category_id', 'subsystem', 'item_text', 'url', 'priority_id', 'status_id', 'project_id',
+    'category_id', 'subsystem_id', 'item_text', 'url', 'priority_id', 'status_id', 'project_id',
 ];
 
 function item_select_sql(): string {
     return "SELECT i.id, i.sort_order, i.project_id, p.name AS project_name,
+                   p.bg_color AS project_bg_color, p.text_color AS project_text_color,
                    i.category_id, c.name AS category_name,
-                   i.subsystem, i.item_text, i.url,
+                   i.subsystem_id, sub.name AS subsystem_name,
+                   sub.bg_color AS subsystem_bg_color, sub.text_color AS subsystem_text_color,
+                   i.item_text, i.url,
                    i.priority_id, pr.name AS priority_name,
+                   pr.bg_color AS priority_bg_color, pr.text_color AS priority_text_color,
                    i.order_in_priority,
                    i.status_id, s.name AS status_name,
+                   s.bg_color AS status_bg_color, s.text_color AS status_text_color,
                    i.created_at, i.updated_at
             FROM items i
             LEFT JOIN projects p ON p.id = i.project_id
             LEFT JOIN categories c ON c.id = i.category_id
+            LEFT JOIN subsystems sub ON sub.id = i.subsystem_id
             LEFT JOIN priorities pr ON pr.id = i.priority_id
             LEFT JOIN statuses s ON s.id = i.status_id";
 }
@@ -33,7 +39,7 @@ if ($method === 'GET') {
         }
     }
     if (!empty($_GET['q'])) {
-        $where[] = "(i.item_text LIKE ? OR i.subsystem LIKE ? OR i.url LIKE ?)";
+        $where[] = "(i.item_text LIKE ? OR sub.name LIKE ? OR i.url LIKE ?)";
         $needle = '%' . $_GET['q'] . '%';
         array_push($params, $needle, $needle, $needle);
     }
@@ -65,13 +71,13 @@ if ($method === 'POST') {
     }
 
     $stmt = $pdo->prepare('INSERT INTO items
-        (sort_order, project_id, category_id, subsystem, item_text, url, priority_id, order_in_priority, status_id)
+        (sort_order, project_id, category_id, subsystem_id, item_text, url, priority_id, order_in_priority, status_id)
         VALUES (?,?,?,?,?,?,?,?,?)');
     $stmt->execute([
         $sortOrder,
         $projectId,
         !empty($body['category_id']) ? (int)$body['category_id'] : null,
-        $body['subsystem'] ?? '',
+        !empty($body['subsystem_id']) ? (int)$body['subsystem_id'] : null,
         $body['item_text'] ?? '',
         $body['url'] ?? '',
         $priorityId,

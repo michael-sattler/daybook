@@ -114,17 +114,26 @@ table#items-table tbody tr:hover { background: #f0f7ff; }
 .col-docs, .col-notes { width: 70px; }
 .col-actions { width: 30px; }
 
-.priority-group-header td {
-  background: #dde3ea;
-  font-weight: 600;
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--border);
-}
-
 .drag-handle {
   cursor: grab;
   color: var(--muted);
   margin-right: 2px;
+}
+
+/* Colorized option selects: Subsystem/Project/Status render as rounded pills,
+   Priority fills the entire cell (set inline via JS from each option's stored
+   bg_color/text_color). */
+select.color-pill {
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-weight: 500;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: none;
+  text-align: center;
+}
+.col-priority select {
+  font-weight: 500;
 }
 
 /* ---------- modals ---------- */
@@ -164,6 +173,54 @@ ul.notes-list .note-meta { font-size: 11px; color: var(--muted); }
 ul.docs-list li a { flex: 1; word-break: break-all; }
 
 .option-name-input { flex: 1; border-color: var(--border); }
+
+.color-btn {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 13px;
+  line-height: 1;
+  flex: none;
+}
+.bucket-btn { font-size: 12px; }
+.text-btn { font-weight: 700; background: #fff; }
+
+.color-picker-popover {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  padding: 10px;
+  z-index: 300;
+  width: 188px;
+}
+.color-swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+.color-swatch {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0;
+}
+.color-swatch:hover { outline: 2px solid var(--accent); }
+.color-picker-custom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  gap: 6px;
+}
+.color-picker-custom input[type="color"] {
+  width: 36px;
+  height: 26px;
+  padding: 0;
+  border-color: var(--border);
+}
 
 .inline-form { display: flex; gap: 6px; margin-top: 8px; }
 .inline-form input, .inline-form textarea { border-color: var(--border); background: #fff; }

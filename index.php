@@ -31,6 +31,7 @@ require_login();
   <select id="filter-priority"><option value="">All Priorities</option></select>
   <select id="filter-status"><option value="">All Statuses</option></select>
   <button id="manage-categories-btn" class="link-btn">Edit Categories</button>
+  <button id="manage-subsystems-btn" class="link-btn">Edit Subsystems</button>
   <button id="manage-priorities-btn" class="link-btn">Edit Priorities</button>
   <button id="manage-statuses-btn" class="link-btn">Edit Statuses</button>
   <button id="clear-filters-btn" class="link-btn">Clear Filters</button>
@@ -59,7 +60,7 @@ require_login();
   </table>
 </div>
 
-<!-- Generic option-list management modal (categories / priorities / statuses) -->
+<!-- Generic option-list management modal (categories / subsystems / priorities / statuses / projects) -->
 <div id="option-modal" class="modal-overlay hidden">
   <div class="modal">
     <h2 id="option-modal-title">Manage Options</h2>
@@ -70,21 +71,6 @@ require_login();
     </form>
     <div class="modal-actions">
       <button id="option-modal-close" class="primary">Done</button>
-    </div>
-  </div>
-</div>
-
-<!-- Project management modal -->
-<div id="project-modal" class="modal-overlay hidden">
-  <div class="modal">
-    <h2>Manage Projects</h2>
-    <ul id="project-modal-list" class="option-list"></ul>
-    <form id="project-modal-add-form" class="inline-form">
-      <input type="text" id="project-modal-new-name" placeholder="New project name...">
-      <button type="submit">Add</button>
-    </form>
-    <div class="modal-actions">
-      <button id="project-modal-close" class="primary">Done</button>
     </div>
   </div>
 </div>
