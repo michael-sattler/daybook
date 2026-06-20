@@ -1,24 +1,9 @@
 <?php
 require_once __DIR__ . '/includes/auth.php';
 require_login();
-?>
-<!DOCTYPE html>
-<html lang="en">
-<?php include 'elements/pagehead.php'; ?>
-<body>
-<header class="topbar">
-  <h1>Daybook</h1>
-  <div class="topbar-controls">
-    <label>Project
-      <select id="project-select"></select>
-    </label>
-    <button id="manage-projects-btn" class="icon-btn" title="Manage projects">⚙ Projects</button>
-    <button id="sort-priority-btn">Sort by Priority &gt; Order</button>
-    <button id="add-item-btn" class="primary">+ New Item</button>
-    <a href="/logout.php" class="logout-link">Log out</a>
-  </div>
-</header>
 
+ob_start();
+?>
 <div class="filterbar">
   <input type="text" id="filter-q" placeholder="Search item / subsystem / URL...">
   <select id="filter-category"><option value="">All Categories</option></select>
@@ -101,7 +86,7 @@ require_login();
 </div>
 
 <div id="toast" class="toast hidden"></div>
-
-<script src="/assets/js/app.js"></script>
-</body>
-</html>
+<?php
+$content = ob_get_clean();
+$pageScripts = '<script src="/assets/js/app.js"></script>';
+include __DIR__ . '/elements/layout.php';

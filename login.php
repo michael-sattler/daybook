@@ -9,20 +9,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     $error = 'Incorrect password.';
 }
+
+ob_start();
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>Login - Daybook</title>
-<link rel="stylesheet" href="/assets/css/style.css">
-</head>
-<body class="login-page">
   <form class="login-box" method="post">
     <h1>Daybook</h1>
     <?php if ($error): ?><p class="error"><?= htmlspecialchars($error) ?></p><?php endif; ?>
     <input type="password" name="password" placeholder="Password" autofocus required>
     <button type="submit">Log In</button>
   </form>
-</body>
-</html>
+<?php
+$content = ob_get_clean();
+$pageTitle = 'Login - Daybook';
+$bodyClass = 'login-page';
+include __DIR__ . '/elements/layout-public.php';

@@ -22,7 +22,13 @@ Google Analytics (via Google Tag Manager)
   - 1. No escaping during form processing
   - 2. SQL escape only in database functions ($character_name = mysqli_real_escape_string($mysqli, $character_name);)
   - 3. HTML escape only during output (echo htmlspecialchars($character_name);)
-- PHP/web app files should use ob_start and a centralized layout file (location TBD based on structure) to centralize display templates
+- PHP/web app files should use ob_start() and a centralized layout file to centralize display templates:
+  - Page scripts (`index.php`, `login.php`, etc.) do their auth/data setup, then `ob_start()`, echo only their page-specific body markup, then `$content = ob_get_clean();` and `include` the layout.
+  - `/elements/layout.php` - shell for authenticated app pages (doctype/head/body, includes `/elements/topbar.php`, echoes `$content`, then `$pageScripts` for page-specific `<script>` tags).
+  - `/elements/layout-public.php` - shell for unauthenticated pages (doctype/head/body, no topbar, echoes `$content`). Supports `$bodyClass` for page-specific body classes (e.g. `login-page`).
+  - `/elements/pagehead.php` - shared `<head>` (meta, title via `$pageTitle ?? 'Daybook'`, global CSS/JS includes), pulled in by both layouts.
+  - `/elements/topbar.php` - shared top nav/header chrome for authenticated pages.
+  - Reusable display fragments belong in `/elements/`; page scripts stay thin (data + one `ob_start()`/layout include).
 
 *STYLES*
 - Front-end styles should be in /public/app/assets/css/styles.css and on application-specific /public/app/assets/css/styles-[application].css if not needed in most places
