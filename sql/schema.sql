@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS projects (
   sort_order INT NOT NULL DEFAULT 0,
   bg_color VARCHAR(7) NULL,
   text_color VARCHAR(7) NULL,
-  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at INT NOT NULL,
   UNIQUE KEY uniq_projects_slug (slug)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -59,8 +59,8 @@ CREATE TABLE IF NOT EXISTS items (
   priority_id INT NULL,
   order_in_priority INT NOT NULL DEFAULT 0,
   status_id INT NULL,
-  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  created_at INT NOT NULL,
+  updated_at INT NOT NULL,
   FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
   FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
   FOREIGN KEY (subsystem_id) REFERENCES subsystems(id) ON DELETE SET NULL,
@@ -81,8 +81,8 @@ CREATE TABLE IF NOT EXISTS notes (
   id INT AUTO_INCREMENT PRIMARY KEY,
   item_id INT NOT NULL,
   body TEXT NOT NULL,
-  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  created_at INT NOT NULL,
+  updated_at INT NOT NULL,
   FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -97,8 +97,8 @@ INSERT INTO statuses (name, sort_order, bg_color, text_color) VALUES
   ('BLOCKED', 5, '#fecaca', '#7f1d1d');
 
 -- Projects: first pastel ROYGBIV swatch
-INSERT INTO projects (name, slug, sort_order, bg_color, text_color) VALUES
-  ('General', 'general', 1, '#ffd6d6', '#7a2e2e');
+INSERT INTO projects (name, slug, sort_order, bg_color, text_color, created_at) VALUES
+  ('General', 'general', 1, '#ffd6d6', '#7a2e2e', UNIX_TIMESTAMP());
 
 -- Categories: no color treatment (plain)
 INSERT INTO categories (project_id, name, sort_order) VALUES

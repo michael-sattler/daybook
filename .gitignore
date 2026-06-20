@@ -1,6 +1,7 @@
-includes/config.local.php
-includes/config.production.php
-includes/config.*.php
+public/config/development.config.php
+public/config/staging.config.php
+public/config/production.config.php
+public/logs/
 .DS_Store
 supervisord.log
 supervisord.pid

@@ -26,12 +26,12 @@ Google Analytics (via Google Tag Manager)
   - Page scripts (`index.php`, `login.php`, etc.) do their auth/data setup, then `ob_start()`, echo only their page-specific body markup, then `$content = ob_get_clean();` and `include` the layout.
   - `/elements/layout.php` - shell for authenticated app pages (doctype/head/body, includes `/elements/topbar.php`, echoes `$content`, then `$pageScripts` for page-specific `<script>` tags).
   - `/elements/layout-public.php` - shell for unauthenticated pages (doctype/head/body, no topbar, echoes `$content`). Supports `$bodyClass` for page-specific body classes (e.g. `login-page`).
-  - `/elements/pagehead.php` - shared `<head>` (meta, title via `$pageTitle ?? 'Daybook'`, global CSS/JS includes), pulled in by both layouts.
+  - `/elements/pagehead.php` - shared `<head>` (meta, title via `$pageTitle ?? '[App Name]'`, global CSS/JS includes), pulled in by both layouts.
   - `/elements/topbar.php` - shared top nav/header chrome for authenticated pages.
   - Reusable display fragments belong in `/elements/`; page scripts stay thin (data + one `ob_start()`/layout include).
 
 *STYLES*
-- Front-end styles should be in /public/app/assets/css/styles.css and on application-specific /public/app/assets/css/styles-[application].css if not needed in most places
+- Front-end styles should be in /public/assets/css/style.css and on application-specific /public/assets/css/style-[application].css if not needed in most places. (`/public/assets/` holds front-end-served files - css/js/images; `/public/app/` is reserved for backend includes per specs-architecture.md, so frontend assets stay separate from it.)
 - we can add page-specific styles inline on the page during development, but should come back to clean those up later
 - All on-screen Javascript AND PHP error messages for users and admins should be stored in $_SESSION['error_message'], $_SESSION['success_message'], or $_SESSION['info_message'], which will be shown to the user via a centralized alert system
 
