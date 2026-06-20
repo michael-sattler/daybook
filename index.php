@@ -41,7 +41,7 @@ ob_start();
 
 <!-- Generic option-list management modal (categories / subsystems / priorities / statuses / projects) -->
 <div id="option-modal" class="modal-overlay hidden">
-  <div class="modal">
+  <div class="modal-box">
     <h2 id="option-modal-title">Manage Options</h2>
     <ul id="option-modal-list" class="option-list"></ul>
     <form id="option-modal-add-form" class="inline-form">
@@ -56,7 +56,7 @@ ob_start();
 
 <!-- Docs + Notes detail modal for a single item -->
 <div id="detail-modal" class="modal-overlay hidden">
-  <div class="modal modal-wide">
+  <div class="modal-box modal-wide">
     <h2>Item Details</h2>
     <p class="detail-item-text" id="detail-item-text"></p>
 

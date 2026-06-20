@@ -149,7 +149,9 @@ select.color-pill {
   z-index: 100;
 }
 .modal-overlay.hidden { display: none; }
-.modal {
+/* Named .modal-box (not .modal) to avoid colliding with Bootstrap's own
+   .modal component, which defaults to display:none and hid this entirely. */
+.modal-box {
   background: #fff;
   border-radius: 6px;
   padding: 20px;
@@ -157,9 +159,9 @@ select.color-pill {
   max-height: 80vh;
   overflow-y: auto;
 }
-.modal.modal-wide { width: 560px; }
-.modal h2 { margin-top: 0; font-size: 16px; }
-.modal h3 { font-size: 14px; margin: 14px 0 6px; }
+.modal-box.modal-wide { width: 560px; }
+.modal-box h2 { margin-top: 0; font-size: 16px; }
+.modal-box h3 { font-size: 14px; margin: 14px 0 6px; }
 
 ul.option-list, ul.docs-list, ul.notes-list { list-style: none; margin: 0; padding: 0; }
 ul.option-list li, ul.docs-list li, ul.notes-list li {
