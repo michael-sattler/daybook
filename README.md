@@ -8,6 +8,34 @@ within a priority, docs links, and threaded notes per item.
 
 Plain PHP (PDO/MySQL) + vanilla JS. No build step, no framework — upload and go.
 
+## Local development (Docker)
+
+A single container runs Apache+PHP and MariaDB (MySQL-compatible) together via
+`supervisord`, so you can run the whole app locally with one `docker run`.
+This is dev-only - it's not what GreenGeeks uses in production.
+
+```sh
+docker build -t daybook-dev -f docker/Dockerfile .
+docker volume create daybook_mysql_data
+docker run -d --name daybook-dev \
+  -p 8765:80 -p 3307:3306 \
+  -v "$(pwd):/var/www/html" \
+  -v daybook_mysql_data:/var/lib/mysql \
+  daybook-dev
+```
+
+- On first boot it creates the `daybook` database/user and imports `sql/schema.sql`
+  automatically; on later boots it just starts both services (your data persists in
+  the `daybook_mysql_data` volume).
+- Visit `http://127.0.0.1:8765/login.php`. Create `includes/config.local.php`
+  (gitignored) pointing at `host: 127.0.0.1`, `name/user/pass: daybook`, plus an
+  `auth.password_hash` (see step 5 below for how to generate one) - this file
+  is read in place of `includes/config.php` when present.
+- The repo is bind-mounted into the container, so editing files on your host
+  is picked up immediately - no rebuild needed unless you change the Dockerfile.
+- MariaDB is also reachable from your host at `127.0.0.1:3307` if you want to
+  poke at it with a GUI client.
+
 ## Deploying to GreenGeeks (cPanel)
 
 1. **Create the subdomain.** In cPanel > Domains, create `subdomain.myremotecode.com`
