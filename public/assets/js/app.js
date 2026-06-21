@@ -185,12 +185,22 @@
   }
 
   function renderFilterSelects() {
-    document.getElementById('filter-category').innerHTML =
+    const categorySelect = document.getElementById('filter-category');
+    categorySelect.innerHTML =
       '<option value="">All Categories</option>' + state.categories.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
-    document.getElementById('filter-priority').innerHTML =
+    categorySelect.value = state.filters.category_id;
+
+    const prioritySelect = document.getElementById('filter-priority');
+    prioritySelect.innerHTML =
       '<option value="">All Priorities</option>' + state.priorities.map((p) => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
-    document.getElementById('filter-status').innerHTML =
-      '<option value="">All Statuses</option>' + state.statuses.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+    prioritySelect.value = state.filters.priority_id;
+
+    const statusSelect = document.getElementById('filter-status');
+    statusSelect.innerHTML =
+      '<option value="">All Statuses</option>'
+      + '<option value="pending">All pending</option>'
+      + state.statuses.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+    statusSelect.value = state.filters.status_id;
   }
 
   function renderItems() {

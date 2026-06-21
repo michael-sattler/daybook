@@ -16,6 +16,8 @@ const FIELD_TYPES = [
     'url' => 's', 'priority_id' => 's', 'status_id' => 's', 'project_id' => 's',
 ];
 
+const PENDING_STATUS_NAMES = ['TODO', 'UNDERWAY', 'BLOCKED'];
+
 function item_select_sql(): string {
     return "SELECT i.id, i.sort_order, i.project_id, p.name AS project_name,
                    p.bg_color AS project_bg_color, p.text_color AS project_text_color,
@@ -48,11 +50,21 @@ if ($method === 'GET') {
     $where = [];
     $types = '';
     $params = [];
-    foreach (['project_id', 'category_id', 'priority_id', 'status_id'] as $field) {
+    foreach (['project_id', 'category_id', 'priority_id'] as $field) {
         if (!empty($_GET[$field])) {
             $where[] = "i.$field = ?";
             $types .= 'i';
             $params[] = (int)$_GET[$field];
+        }
+    }
+    if (!empty($_GET['status_id'])) {
+        if ($_GET['status_id'] === 'pending') {
+            $pending = "'" . implode("','", PENDING_STATUS_NAMES) . "'";
+            $where[] = "(i.status_id IS NULL OR s.name IN ($pending))";
+        } else {
+            $where[] = 'i.status_id = ?';
+            $types .= 'i';
+            $params[] = (int)$_GET['status_id'];
         }
     }
     if (!empty($_GET['q'])) {
