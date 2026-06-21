@@ -98,9 +98,9 @@
       state.projects = [created];
     }
     const requestedSlug = window.INITIAL_PROJECT_SLUG || '';
-    const matched = requestedSlug && state.projects.find((p) => p.slug === requestedSlug);
+    const matched = requestedSlug && state.projects.find((p) => projectSlug(p) === requestedSlug);
     const initialProject = matched || state.projects[0];
-    state.currentProjectId = initialProject.id;
+    state.currentProjectId = Number(initialProject.id);
     navigateToProject(initialProject, { replace: true });
     renderProjectSelect();
     await loadProjectScopedLists();
@@ -108,18 +108,48 @@
     bindGlobalEvents();
   }
 
-  function projectUrl(project) {
-    return project && project.slug ? `/projects/${project.slug}` : null;
+  function sameId(a, b) {
+    return Number(a) === Number(b);
   }
 
-  function navigateToProject(project, { replace = false } = {}) {
+  function findProject(id) {
+    return state.projects.find((p) => sameId(p.id, id));
+  }
+
+  function slugifyName(name) {
+    const slug = String(name ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    return slug || 'project';
+  }
+
+  function projectSlug(project) {
+    return (project && (project.slug || slugifyName(project.name))) || '';
+  }
+
+  function projectUrl(project) {
+    const slug = projectSlug(project);
+    return slug ? `/projects/${slug}` : null;
+  }
+
+  function navigateToProject(project, { replace = false, reload = false } = {}) {
     const url = projectUrl(project);
-    if (!url || window.location.pathname === url) return;
-    if (replace) {
-      window.history.replaceState({}, '', url);
-    } else {
+    if (!url || window.location.pathname === url) return false;
+    if (reload) {
       window.location.assign(url);
+      return true;
     }
+    if (replace) window.history.replaceState({}, '', url);
+    else window.history.pushState({}, '', url);
+    return true;
+  }
+
+  async function switchProject(projectId) {
+    const project = findProject(projectId);
+    if (!project) return;
+    state.currentProjectId = Number(project.id);
+    renderProjectSelect();
+    navigateToProject(project);
+    await loadProjectScopedLists();
+    await loadItems();
   }
 
   async function loadProjectScopedLists() {
@@ -150,7 +180,7 @@
   function renderProjectSelect() {
     const sel = document.getElementById('project-select');
     sel.innerHTML = state.projects
-      .map((p) => `<option value="${p.id}" ${p.id === state.currentProjectId ? 'selected' : ''}>${escapeHtml(p.name)}</option>`)
+      .map((p) => `<option value="${p.id}" ${sameId(p.id, state.currentProjectId) ? 'selected' : ''}>${escapeHtml(p.name)}</option>`)
       .join('');
   }
 
@@ -309,19 +339,15 @@
 
   function bindGlobalEvents() {
     document.getElementById('project-select').addEventListener('change', (e) => {
-      const project = state.projects.find((p) => p.id === Number(e.target.value));
-      navigateToProject(project);
+      switchProject(e.target.value);
     });
 
     window.addEventListener('popstate', async () => {
       const match = window.location.pathname.match(/^\/projects\/([a-z0-9-]+)\/?$/);
       const slug = match ? match[1] : '';
-      const project = (slug && state.projects.find((p) => p.slug === slug)) || state.projects[0];
-      if (!project || project.id === state.currentProjectId) return;
-      state.currentProjectId = project.id;
-      renderProjectSelect();
-      await loadProjectScopedLists();
-      await loadItems();
+      const project = (slug && state.projects.find((p) => projectSlug(p) === slug)) || state.projects[0];
+      if (!project || sameId(project.id, state.currentProjectId)) return;
+      await switchProject(project.id);
     });
 
     document.getElementById('sort-priority-btn').addEventListener('click', async () => {
@@ -444,9 +470,9 @@
         try {
           const updated = await put(cfg.endpoint, { id: opt.id, name: e.target.value.trim() });
           if (currentOptionType === 'projects' && updated && updated.slug) {
-            const idx = state.projects.findIndex((p) => p.id === opt.id);
+            const idx = state.projects.findIndex((p) => sameId(p.id, opt.id));
             if (idx !== -1) state.projects[idx] = { ...state.projects[idx], ...updated };
-            if (state.currentProjectId === opt.id) navigateToProject(updated);
+            if (sameId(state.currentProjectId, opt.id)) navigateToProject(updated, { replace: true });
           }
           await refreshOptionList(currentOptionType);
         } catch (err) {
@@ -484,8 +510,8 @@
           await del(`${cfg.endpoint}?id=${opt.id}`);
           if (currentOptionType === 'projects') {
             state.projects = state.projects.filter((p) => p.id !== opt.id);
-            if (state.currentProjectId === opt.id) {
-              navigateToProject(state.projects[0]);
+            if (sameId(state.currentProjectId, opt.id)) {
+              navigateToProject(state.projects[0], { reload: true });
             }
             renderProjectSelect();
           }
