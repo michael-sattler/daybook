@@ -51,6 +51,10 @@ if ($method === 'PUT') {
         $sets[] = 'name = ?';
         $types .= 's';
         $params[] = $name;
+        $slug = unique_project_slug($mysqli, slugify($name), $id);
+        $sets[] = 'slug = ?';
+        $types .= 's';
+        $params[] = $slug;
     }
     if (array_key_exists('bg_color', $body)) { $sets[] = 'bg_color = ?'; $types .= 's'; $params[] = $body['bg_color'] ?: null; }
     if (array_key_exists('text_color', $body)) { $sets[] = 'text_color = ?'; $types .= 's'; $params[] = $body['text_color'] ?: null; }
@@ -60,7 +64,12 @@ if ($method === 'PUT') {
     $stmt = $mysqli->prepare('UPDATE projects SET ' . implode(', ', $sets) . ' WHERE id = ?');
     bind_dynamic($stmt, $types, $params);
     $stmt->execute();
-    respond(['ok' => true]);
+
+    $stmt = $mysqli->prepare('SELECT id, name, slug, sort_order, bg_color, text_color FROM projects WHERE id = ?');
+    $stmt->bind_param('i', $id);
+    $stmt->execute();
+    $project = $stmt->get_result()->fetch_assoc();
+    respond($project ?: ['ok' => true]);
 }
 
 if ($method === 'DELETE') {

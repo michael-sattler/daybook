@@ -101,17 +101,25 @@
     const matched = requestedSlug && state.projects.find((p) => p.slug === requestedSlug);
     const initialProject = matched || state.projects[0];
     state.currentProjectId = initialProject.id;
-    pushProjectUrl(initialProject);
+    navigateToProject(initialProject, { replace: true });
     renderProjectSelect();
     await loadProjectScopedLists();
     await loadItems();
     bindGlobalEvents();
   }
 
-  function pushProjectUrl(project) {
-    if (!project || !project.slug) return;
-    const url = `/projects/${project.slug}`;
-    if (window.location.pathname !== url) window.history.pushState({}, '', url);
+  function projectUrl(project) {
+    return project && project.slug ? `/projects/${project.slug}` : null;
+  }
+
+  function navigateToProject(project, { replace = false } = {}) {
+    const url = projectUrl(project);
+    if (!url || window.location.pathname === url) return;
+    if (replace) {
+      window.history.replaceState({}, '', url);
+    } else {
+      window.location.assign(url);
+    }
   }
 
   async function loadProjectScopedLists() {
@@ -300,11 +308,9 @@
   // ---------- top-level controls ----------
 
   function bindGlobalEvents() {
-    document.getElementById('project-select').addEventListener('change', async (e) => {
-      state.currentProjectId = Number(e.target.value);
-      pushProjectUrl(state.projects.find((p) => p.id === state.currentProjectId));
-      await loadProjectScopedLists();
-      await loadItems();
+    document.getElementById('project-select').addEventListener('change', (e) => {
+      const project = state.projects.find((p) => p.id === Number(e.target.value));
+      navigateToProject(project);
     });
 
     window.addEventListener('popstate', async () => {
@@ -436,7 +442,12 @@
       `;
       li.querySelector('.option-name-input').addEventListener('change', async (e) => {
         try {
-          await put(cfg.endpoint, { id: opt.id, name: e.target.value.trim() });
+          const updated = await put(cfg.endpoint, { id: opt.id, name: e.target.value.trim() });
+          if (currentOptionType === 'projects' && updated && updated.slug) {
+            const idx = state.projects.findIndex((p) => p.id === opt.id);
+            if (idx !== -1) state.projects[idx] = { ...state.projects[idx], ...updated };
+            if (state.currentProjectId === opt.id) navigateToProject(updated);
+          }
           await refreshOptionList(currentOptionType);
         } catch (err) {
           toast(err.message, true);
@@ -474,10 +485,7 @@
           if (currentOptionType === 'projects') {
             state.projects = state.projects.filter((p) => p.id !== opt.id);
             if (state.currentProjectId === opt.id) {
-              state.currentProjectId = state.projects[0] ? state.projects[0].id : null;
-              pushProjectUrl(state.projects[0]);
-              await loadProjectScopedLists();
-              await loadItems();
+              navigateToProject(state.projects[0]);
             }
             renderProjectSelect();
           }
