@@ -37,6 +37,9 @@ ob_start();
     <tbody id="items-tbody">
     </tbody>
   </table>
+  <div class="grid-actions">
+    <button id="add-item-btn" class="primary">+ New Item</button>
+  </div>
 </div>
 
 <!-- Generic option-list management modal (categories / subsystems / priorities / statuses / projects) -->

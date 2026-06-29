@@ -34,6 +34,24 @@
     detailItemId: null,
   };
 
+  const PROJECT_COOKIE = 'daybook_project';
+
+  function getProjectCookie() {
+    const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${PROJECT_COOKIE}=([^;]*)`));
+    return match ? decodeURIComponent(match[1]) : '';
+  }
+
+  function setProjectCookie(project) {
+    const slug = projectSlug(project);
+    if (!slug) return;
+    const maxAge = 60 * 60 * 24 * 365;
+    document.cookie = `${PROJECT_COOKIE}=${encodeURIComponent(slug)}; path=/; max-age=${maxAge}; SameSite=Lax`;
+  }
+
+  function findProjectBySlug(slug) {
+    return slug && state.projects.find((p) => projectSlug(p) === slug);
+  }
+
   // ---------- low-level fetch helpers ----------
 
   async function api(path, options = {}) {
@@ -98,9 +116,13 @@
       state.projects = [created];
     }
     const requestedSlug = window.INITIAL_PROJECT_SLUG || '';
-    const matched = requestedSlug && state.projects.find((p) => projectSlug(p) === requestedSlug);
-    const initialProject = matched || state.projects[0];
+    const cookieSlug = getProjectCookie();
+    const initialProject =
+      findProjectBySlug(requestedSlug)
+      || findProjectBySlug(cookieSlug)
+      || state.projects[0];
     state.currentProjectId = Number(initialProject.id);
+    setProjectCookie(initialProject);
     navigateToProject(initialProject, { replace: true });
     renderProjectSelect();
     await loadProjectScopedLists();
@@ -146,6 +168,7 @@
     const project = findProject(projectId);
     if (!project) return;
     state.currentProjectId = Number(project.id);
+    setProjectCookie(project);
     renderProjectSelect();
     navigateToProject(project);
     await loadProjectScopedLists();

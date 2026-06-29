@@ -9,7 +9,6 @@
     </label>
     <button id="manage-projects-btn" class="icon-btn" title="Manage projects">⚙ Projects</button>
     <button id="sort-priority-btn">Sort by Priority &gt; Order</button>
-    <button id="add-item-btn" class="primary">+ New Item</button>
     <a href="/logout" class="logout-link">Log out</a>
   </div>
 </header>
