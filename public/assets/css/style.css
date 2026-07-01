@@ -64,8 +64,63 @@ textarea { resize: none; overflow: hidden; min-height: 28px; line-height: 1.3; }
 .topbar-controls { display: flex; align-items: center; gap: 10px; }
 .topbar-controls label { font-size: 12px; color: #cbd5e1; display: flex; flex-direction: column; gap: 2px; }
 .topbar-controls select { background: #fff; }
-.logout-link { color: #cbd5e1; font-size: 13px; margin-left: 6px; }
 .logo-header {max-height: 60px; }
+
+.user-menu { position: relative; }
+.user-menu-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 4px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 13px;
+}
+.user-menu-toggle:hover { background: rgba(255, 255, 255, 0.14); }
+.user-menu-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+.user-menu-chevron { font-size: 10px; opacity: 0.75; }
+.user-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 168px;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+}
+.user-menu-dropdown.hidden { display: none; }
+.user-menu-option {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  border: none;
+  background: none;
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  text-decoration: none;
+  font-family: inherit;
+  cursor: pointer;
+}
+.user-menu-option:hover { background: #f0f7ff; }
 
 .project-strip {
   position: relative;
@@ -129,6 +184,20 @@ textarea { resize: none; overflow: hidden; min-height: 28px; line-height: 1.3; }
   flex-shrink: 0;
   border: 1px solid rgba(0, 0, 0, 0.12);
 }
+.project-strip-manage-btn {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: inherit;
+  opacity: 0.8;
+  font-size: 15px;
+  padding: 4px 8px;
+}
+.project-strip-manage-btn:hover {
+  opacity: 1;
+  color: inherit;
+}
 
 .filterbar {
   display: flex;
@@ -141,6 +210,7 @@ textarea { resize: none; overflow: hidden; min-height: 28px; line-height: 1.3; }
 }
 .filterbar input, .filterbar select { width: auto; min-width: 140px; background: #fff; border-color: var(--border); }
 .filterbar #filter-q { min-width: 220px; }
+.filterbar #sort-priority-btn { margin-left: auto; }
 
 /* ---------- grid ---------- */
 

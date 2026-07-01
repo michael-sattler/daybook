@@ -12,6 +12,7 @@ ob_start();
     </button>
     <ul id="project-strip-menu" class="project-strip-menu hidden" role="listbox"></ul>
   </div>
+  <button type="button" id="manage-projects-btn" class="icon-btn project-strip-manage-btn" title="Manage projects" aria-label="Manage projects">⚙</button>
 </div>
 
 <div class="filterbar">
@@ -24,6 +25,7 @@ ob_start();
   <button id="manage-priorities-btn" class="link-btn">Edit Priorities</button>
   <button id="manage-statuses-btn" class="link-btn">Edit Statuses</button>
   <button id="clear-filters-btn" class="link-btn">Clear Filters</button>
+  <button id="sort-priority-btn">Sort by Priority &gt; Order</button>
 </div>
 
 <div class="grid-wrap">

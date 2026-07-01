@@ -43,3 +43,16 @@ function logout(): void {
     $_SESSION = [];
     session_destroy();
 }
+
+function current_user_email(): string {
+    global $authUserEmail;
+    return isset($authUserEmail) ? trim((string)$authUserEmail) : '';
+}
+
+function current_user_initial(): string {
+    $email = current_user_email();
+    if ($email === '') {
+        return '?';
+    }
+    return strtoupper(substr($email, 0, 1));
+}
