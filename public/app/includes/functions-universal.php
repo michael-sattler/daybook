@@ -23,6 +23,14 @@ function db_escape(mysqli $mysqli, string $value): string {
     return $mysqli->real_escape_string($value);
 }
 
+function user_display_name(?string $name, ?string $email = ''): string {
+    $name = trim((string)$name);
+    if ($name !== '') {
+        return $name;
+    }
+    return trim((string)$email);
+}
+
 // mysqli_stmt::bind_param needs its arguments by reference, which rules out a
 // plain call with a variable-length array. This rebuilds the reference list
 // so callers can bind a dynamic number of params (e.g. partial UPDATE SETs).
@@ -50,10 +58,10 @@ function seed_project_defaults(mysqli $mysqli, int $projectId): void {
         $stmt->execute();
     }
 
-    $priorities = ['1-Critical', '2-High', '3-Medium', '4-Low', '5-Someday'];
+    $priorities = ['1-Immediately', '2-Now', '3-Next', '4-Soon', '5-Later'];
     $stmt = $mysqli->prepare('INSERT INTO priorities (project_id, name, sort_order, bg_color, text_color) VALUES (?,?,?,?,?)');
     foreach ($priorities as $i => $name) {
-        [$bg, $text] = PRIORITY_GRADIENT_PALETTE[$i % count(PRIORITY_GRADIENT_PALETTE)];
+        [$bg, $text] = priority_palette_colors($i + 1);
         $order = $i + 1;
         $stmt->bind_param('isiss', $projectId, $name, $order, $bg, $text);
         $stmt->execute();

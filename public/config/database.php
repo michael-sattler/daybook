@@ -14,3 +14,6 @@ if (!$mysqli->real_connect($dbHost, $dbUser, $dbPass, $dbName, $dbPort ?? null))
     exit;
 }
 $mysqli->set_charset('utf8mb4');
+
+require_once __DIR__ . '/../app/includes/functions-bootstrap.php';
+bootstrap_users_layer($mysqli);

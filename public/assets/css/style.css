@@ -126,6 +126,8 @@ textarea { resize: none; overflow: hidden; min-height: 28px; line-height: 1.3; }
   position: relative;
   display: flex;
   justify-content: center;
+  align-items: center;
+  padding: 0 72px;
   border-bottom: 1px solid var(--border);
 }
 .project-strip-control {
@@ -145,7 +147,20 @@ textarea { resize: none; overflow: hidden; min-height: 28px; line-height: 1.3; }
   cursor: pointer;
 }
 .project-strip-toggle:hover { filter: brightness(0.96); }
-.project-strip-chevron { font-size: 10px; opacity: 0.75; }
+.project-strip-name { flex-shrink: 1; min-width: 0; }
+.project-strip-role {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.9;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  line-height: 1.2;
+}
+.project-strip-chevron { font-size: 10px; opacity: 0.75; flex-shrink: 0; }
 .project-strip-menu {
   position: absolute;
   top: 100%;
@@ -184,15 +199,23 @@ textarea { resize: none; overflow: hidden; min-height: 28px; line-height: 1.3; }
   flex-shrink: 0;
   border: 1px solid rgba(0, 0, 0, 0.12);
 }
-.project-strip-manage-btn {
+.project-strip-actions {
   position: absolute;
-  right: 12px;
+  right: 8px;
   top: 50%;
   transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.project-strip-manage-btn {
+  position: static;
+  transform: none;
   color: inherit;
   opacity: 0.8;
   font-size: 15px;
-  padding: 4px 8px;
+  padding: 4px 6px;
+  flex-shrink: 0;
 }
 .project-strip-manage-btn:hover {
   opacity: 1;
@@ -255,17 +278,34 @@ table#items-table tbody tr:hover { background: #f0f7ff; }
   margin-right: 2px;
 }
 
-/* Colorized option selects: Subsystem/Project/Status render as rounded pills,
-   Priority fills the entire cell (set inline via JS from each option's stored
-   bg_color/text_color). */
-select.color-pill {
+/* Colorized grid cells: closed state shows option colors on the td; the select
+   stays neutral so the open dropdown list is always black on white. */
+#items-table td.cell-colored {
+  background-color: var(--cell-bg);
+  color: var(--cell-text);
+}
+#items-table td.cell-colored:not(.cell-fill) {
   border-radius: 999px;
-  padding: 3px 10px;
+}
+#items-table td.cell-colored select {
+  background: transparent;
+  color: inherit;
   font-weight: 500;
   appearance: none;
   -webkit-appearance: none;
-  background-image: none;
   text-align: center;
+}
+#items-table td.cell-colored.cell-fill select {
+  text-align: left;
+}
+#items-table td.cell-colored.select-menu-open,
+#items-table td.cell-colored.select-menu-open select {
+  background-color: #fff !important;
+  color: #222 !important;
+}
+#items-table select option {
+  background-color: #fff;
+  color: #222;
 }
 .col-priority select {
   font-weight: 500;
@@ -305,6 +345,9 @@ ul.option-list li, ul.docs-list li, ul.notes-list li {
   padding: 4px 0;
   border-bottom: 1px solid #f0f0f0;
 }
+.option-modal-extra { margin: 12px 0 0; font-size: 13px; }
+.option-modal-hint { display: block; margin-top: 4px; font-size: 12px; color: var(--muted); }
+.option-modal-hint code { font-size: 11px; }
 ul.notes-list li { flex-direction: column; align-items: stretch; }
 ul.notes-list .note-meta { font-size: 11px; color: var(--muted); }
 ul.docs-list li a { flex: 1; word-break: break-all; }
@@ -393,6 +436,30 @@ body.login-page {
 }
 .login-box input { border-color: var(--border); padding: 8px; }
 .login-box .error { color: var(--danger); font-size: 13px; margin: 0; }
+.login-subtitle { margin: 0; font-size: 16px; text-align: center; font-weight: 600; }
+.login-hint { margin: 0; font-size: 13px; text-align: center; color: var(--muted); }
+
+.account-page { max-width: 480px; margin: 24px auto; padding: 0 16px; }
+.account-section { margin-bottom: 28px; }
+.account-form { display: flex; flex-direction: column; gap: 8px; }
+.account-form label { font-size: 12px; color: var(--muted); }
+.account-hint { margin: 0 0 8px; font-size: 13px; color: var(--muted); }
+.account-form input { border-color: var(--border); padding: 8px; background: #fff; }
+.success { color: #15803d; font-size: 13px; }
+
+.member-list { list-style: none; padding: 0; margin: 0 0 16px; }
+.member-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.member-row select { width: auto; min-width: 110px; background: #fff; border-color: var(--border); }
+
+.col-assignee select { min-width: 120px; background: #fff; border-color: var(--border); }
+
+.hidden { display: none !important; }
 
 /* ---------- toast ---------- */
 

@@ -2,18 +2,64 @@
 // Generic CRUD + reorder handler for simple ordered lookup lists
 // (subsystems, priorities: project-scoped; statuses: global). Categories use this
 // too but without color support.
-//
-// $colorPalette: an optional list of [bg,text] pairs to cycle through when a new
-// row is created without an explicit color, so new entries get a sensible default
-// instead of "no color".
+
+require_once __DIR__ . '/functions-permissions.php';
+
+function option_list_project_id_from_request(string $method, array $body): int {
+    if ($method === 'GET') {
+        return (int)($_GET['project_id'] ?? 0);
+    }
+    if (!empty($body['project_id'])) {
+        return (int)$body['project_id'];
+    }
+    return 0;
+}
+
+function option_list_resolve_project_id(mysqli $mysqli, string $table, int $rowId): int {
+    if ($table === 'statuses') {
+        return 0;
+    }
+    $stmt = $mysqli->prepare("SELECT project_id FROM {$table} WHERE id = ?");
+    $stmt->bind_param('i', $rowId);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    return $row ? (int)$row['project_id'] : 0;
+}
+
+function option_list_require_read(mysqli $mysqli, string $table, bool $projectScoped, int $projectId): void {
+    if ($table === 'statuses') {
+        return;
+    }
+    if ($projectScoped && $projectId) {
+        permissions_require_project_access($mysqli, $projectId);
+    }
+}
+
+function option_list_require_write(mysqli $mysqli, string $table, bool $projectScoped, int $projectId): void {
+    if ($table === 'statuses') {
+        if (!permissions_can_edit_global_statuses()) {
+            fail('Forbidden', 403);
+        }
+        return;
+    }
+    if (!$projectId) {
+        fail('project_id is required');
+    }
+    if (!permissions_can_edit_project_metadata($mysqli, $projectId)) {
+        fail('Forbidden', 403);
+    }
+}
+
 function handle_option_list(mysqli $mysqli, string $table, bool $projectScoped, array $colorPalette = []): void {
     $method = $_SERVER['REQUEST_METHOD'];
+    $body = in_array($method, ['POST', 'PUT', 'PATCH'], true) ? json_body() : [];
     $columns = $table === 'categories' ? 'id, name, sort_order' : 'id, name, sort_order, bg_color, text_color';
 
     if ($method === 'GET') {
         if ($projectScoped) {
             $projectId = (int)($_GET['project_id'] ?? 0);
             if (!$projectId) fail('project_id is required');
+            option_list_require_read($mysqli, $table, $projectScoped, $projectId);
             $stmt = $mysqli->prepare("SELECT {$columns} FROM {$table} WHERE project_id = ? ORDER BY sort_order, id");
             $stmt->bind_param('i', $projectId);
             $stmt->execute();
@@ -25,14 +71,18 @@ function handle_option_list(mysqli $mysqli, string $table, bool $projectScoped, 
     }
 
     if ($method === 'POST') {
-        $body = json_body();
         $name = trim($body['name'] ?? '');
         if ($name === '') fail('Name is required');
+
+        if (!$projectScoped) {
+            option_list_require_write($mysqli, $table, $projectScoped, 0);
+        }
 
         $projectId = null;
         if ($projectScoped) {
             $projectId = (int)($body['project_id'] ?? 0);
             if (!$projectId) fail('project_id is required');
+            option_list_require_write($mysqli, $table, $projectScoped, $projectId);
             $stmt = $mysqli->prepare("SELECT COUNT(*), COALESCE(MAX(sort_order),0) FROM {$table} WHERE project_id = ?");
             $stmt->bind_param('i', $projectId);
             $stmt->execute();
@@ -68,9 +118,10 @@ function handle_option_list(mysqli $mysqli, string $table, bool $projectScoped, 
     }
 
     if ($method === 'PUT') {
-        $body = json_body();
         $id = (int)($body['id'] ?? 0);
         if (!$id) fail('id is required');
+        $projectId = option_list_resolve_project_id($mysqli, $table, $id);
+        option_list_require_write($mysqli, $table, $projectScoped, $projectId ?: (int)($body['project_id'] ?? 0));
 
         $sets = [];
         $types = '';
@@ -106,6 +157,8 @@ function handle_option_list(mysqli $mysqli, string $table, bool $projectScoped, 
     if ($method === 'DELETE') {
         $id = (int)($_GET['id'] ?? 0);
         if (!$id) fail('id is required');
+        $projectId = option_list_resolve_project_id($mysqli, $table, $id);
+        option_list_require_write($mysqli, $table, $projectScoped, $projectId);
         $stmt = $mysqli->prepare("DELETE FROM {$table} WHERE id = ?");
         $stmt->bind_param('i', $id);
         $stmt->execute();
@@ -113,9 +166,11 @@ function handle_option_list(mysqli $mysqli, string $table, bool $projectScoped, 
     }
 
     if ($method === 'PATCH') {
-        $body = json_body();
         $order = $body['order'] ?? [];
         if (!is_array($order) || !$order) fail('order array is required');
+        $firstId = (int)$order[0];
+        $projectId = option_list_resolve_project_id($mysqli, $table, $firstId);
+        option_list_require_write($mysqli, $table, $projectScoped, $projectId);
         $stmt = $mysqli->prepare("UPDATE {$table} SET sort_order = ? WHERE id = ?");
         foreach ($order as $i => $id) {
             $sortOrder = $i + 1;

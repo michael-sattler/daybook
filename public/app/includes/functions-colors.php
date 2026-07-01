@@ -23,14 +23,47 @@ const PASTEL_ROYGBIV_PALETTE = [
 ];
 
 const PRIORITY_GRADIENT_PALETTE = [
-    ['#b91c1c', '#ffffff'], // deep warning red
+/*    ['#b91c1c', '#ffffff'], // deep warning red
     ['#dc4f4f', '#ffffff'],
     ['#f08080', '#3a1212'],
     ['#ddc1c1', '#3a2a2a'],
     ['#c9d6e8', '#1f2937'],
     ['#a9c6e8', '#1f2937'],
     ['#dbeafe', '#1e3a5f'], // pale blue "someday"
+*/
+    ['#586cff', '#ffffff'], // periwinkle
+    ['#7989ff', '#ffffff'],
+    ['#9ba7ff', '#ffffff'],
+    ['#bcc4ff', '#ffffff'],
+    ['#dee2ff', '#586cff'],
+    ['#eef0ff', '#586cff'],
+    ['#ffffff', '#586cff'], // white "someday"
+
 ];
+
+/** Colors for a priority from its sort_order (1-based). */
+function priority_palette_colors(int $sortOrder): array {
+    $palette = PRIORITY_GRADIENT_PALETTE;
+    $index = max(0, $sortOrder - 1) % count($palette);
+    return $palette[$index];
+}
+
+/** Re-apply PRIORITY_GRADIENT_PALETTE to every priority row in a project. */
+function sync_priority_palette_for_project(mysqli $mysqli, int $projectId): int {
+    $stmt = $mysqli->prepare('SELECT id, sort_order FROM priorities WHERE project_id = ? ORDER BY sort_order, id');
+    $stmt->bind_param('i', $projectId);
+    $stmt->execute();
+    $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+
+    $upd = $mysqli->prepare('UPDATE priorities SET bg_color = ?, text_color = ? WHERE id = ?');
+    foreach ($rows as $row) {
+        [$bg, $text] = priority_palette_colors((int)$row['sort_order']);
+        $id = (int)$row['id'];
+        $upd->bind_param('ssi', $bg, $text, $id);
+        $upd->execute();
+    }
+    return count($rows);
+}
 
 // Swatches offered in the color-picker popup (paint bucket / "T" buttons).
 const COMMON_COLOR_SWATCHES = [

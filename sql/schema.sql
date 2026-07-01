@@ -1,15 +1,54 @@
 -- Daybook schema for MySQL (GreenGeeks cPanel)
 -- Import this via phpMyAdmin into the database you create for this app.
 
+CREATE TABLE IF NOT EXISTS users (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  email VARCHAR(255) NOT NULL,
+  name VARCHAR(100) NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  is_daybookstaff TINYINT(1) NOT NULL DEFAULT 0,
+  created_at INT NOT NULL,
+  UNIQUE KEY uniq_users_email (email)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS projects (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
   slug VARCHAR(150) NOT NULL,
+  owner_user_id INT NULL,
   sort_order INT NOT NULL DEFAULT 0,
   bg_color VARCHAR(7) NULL,
   text_color VARCHAR(7) NULL,
   created_at INT NOT NULL,
-  UNIQUE KEY uniq_projects_slug (slug)
+  UNIQUE KEY uniq_projects_slug (slug),
+  FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS project_members (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  project_id INT NOT NULL,
+  user_id INT NOT NULL,
+  role ENUM('admin', 'manager', 'contributor', 'viewer') NOT NULL,
+  created_at INT NOT NULL,
+  UNIQUE KEY uniq_project_member (project_id, user_id),
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS project_invites (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  project_id INT NOT NULL,
+  email VARCHAR(255) NOT NULL,
+  role ENUM('admin', 'manager', 'contributor', 'viewer') NOT NULL,
+  token VARCHAR(64) NOT NULL,
+  invited_by_user_id INT NOT NULL,
+  created_at INT NOT NULL,
+  expires_at INT NULL,
+  accepted_at INT NULL,
+  UNIQUE KEY uniq_invite_token (token),
+  KEY idx_invite_project_email (project_id, email),
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  FOREIGN KEY (invited_by_user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS categories (
@@ -52,6 +91,8 @@ CREATE TABLE IF NOT EXISTS items (
   id INT AUTO_INCREMENT PRIMARY KEY,
   sort_order INT NOT NULL,
   project_id INT NOT NULL,
+  created_by_user_id INT NULL,
+  assigned_user_id INT NULL,
   category_id INT NULL,
   subsystem_id INT NULL,
   item_text TEXT NOT NULL,
@@ -62,6 +103,8 @@ CREATE TABLE IF NOT EXISTS items (
   created_at INT NOT NULL,
   updated_at INT NOT NULL,
   FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL,
+  FOREIGN KEY (assigned_user_id) REFERENCES users(id) ON DELETE SET NULL,
   FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
   FOREIGN KEY (subsystem_id) REFERENCES subsystems(id) ON DELETE SET NULL,
   FOREIGN KEY (priority_id) REFERENCES priorities(id) ON DELETE SET NULL,

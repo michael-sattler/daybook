@@ -37,7 +37,7 @@ function debug_log($message): void {
     file_put_contents(LOG_PATH . '/app.log', '[' . date('Y-m-d H:i:s') . '] ' . $line . PHP_EOL, FILE_APPEND);
 }
 
-require $platformFile; // defines $dbHost, $dbName, $dbUser, $dbPass, $authPasswordHash
+require $platformFile; // defines $dbHost, $dbName, $dbUser, $dbPass, $daybookStaff*
 
 require __DIR__ . '/database.php'; // establishes global $mysqli
 require __DIR__ . '/auth.php';     // session/login helpers

@@ -13,6 +13,9 @@ RewriteRule ^$ index.php [L]
 # /projects/{slug} -> index.php?project_slug={slug}
 RewriteRule ^projects/([a-z0-9-]+)/?$ index.php?project_slug=$1 [L,QSA]
 
+# /invite/{token} -> invite.php?token={token}
+RewriteRule ^invite/([a-zA-Z0-9]+)/?$ invite.php?token=$1 [L,QSA]
+
 # /api/{name} -> api/{name}.php
 RewriteCond %{DOCUMENT_ROOT}/api/$1.php -f
 RewriteRule ^api/([a-zA-Z0-9_-]+)/?$ api/$1.php [L,QSA]

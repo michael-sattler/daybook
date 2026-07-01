@@ -28,10 +28,13 @@
     priorities: [],
     statuses: [],
     items: [],
+    projectMembers: [],
     currentProjectId: null,
     orderBy: 'sort_order', // or 'priority'
     filters: { q: '', category_id: '', priority_id: '', status_id: '' },
     detailItemId: null,
+    me: null,
+    caps: null,
   };
 
   const PROJECT_COOKIE = 'daybook_project';
@@ -110,10 +113,17 @@
   // ---------- bootstrap ----------
 
   async function init() {
+    const meData = await get('/api/me');
+    state.me = meData;
     state.projects = await get('/api/projects');
     if (!state.projects.length) {
-      const created = await post('/api/projects', { name: 'General' });
-      state.projects = [created];
+      if (meData.is_daybookstaff) {
+        const created = await post('/api/projects', { name: 'General' });
+        state.projects = [created];
+      } else {
+        toast('You have no projects yet. Ask an admin for an invite.', true);
+        return;
+      }
     }
     const requestedSlug = window.INITIAL_PROJECT_SLUG || '';
     const cookieSlug = getProjectCookie();
@@ -126,8 +136,96 @@
     navigateToProject(initialProject, { replace: true });
     renderProjectStrip();
     await loadProjectScopedLists();
+    await loadMeAndCaps();
+    await loadProjectMembers();
     await loadItems();
+    applyPermissionUI();
     bindGlobalEvents();
+  }
+
+  async function loadMeAndCaps() {
+    const data = await get(`/api/me?project_id=${state.currentProjectId}`);
+    state.me = data;
+    state.caps = data.caps || null;
+    renderProjectStrip();
+  }
+
+  function currentProjectRoleLabel() {
+    const caps = state.caps;
+    let role = caps?.role;
+    if (!role) {
+      const project = findProject(state.currentProjectId);
+      role = project?.my_role;
+    }
+    if (caps?.is_daybookstaff && !role) return 'Daybookstaff';
+    if (!role) return '';
+    return role.charAt(0).toUpperCase() + role.slice(1);
+  }
+
+  async function loadProjectMembers() {
+    if (!state.currentProjectId) {
+      state.projectMembers = [];
+      return;
+    }
+    try {
+      state.projectMembers = await get(`/api/members?project_id=${state.currentProjectId}`);
+    } catch {
+      state.projectMembers = [];
+    }
+  }
+
+  function applyPermissionUI() {
+    const caps = state.caps || {};
+    const setVisible = (id, show) => {
+      const el = document.getElementById(id);
+      if (el) el.classList.toggle('hidden', !show);
+    };
+    setVisible('add-item-btn', !!caps.can_create_item);
+    setVisible('manage-categories-btn', !!caps.can_edit_metadata);
+    setVisible('manage-subsystems-btn', !!caps.can_edit_metadata);
+    setVisible('manage-priorities-btn', !!caps.can_edit_metadata);
+    setVisible('manage-statuses-btn', !!state.me?.is_daybookstaff);
+    setVisible('manage-members-btn', !!caps.can_manage_members);
+    setVisible('export-btn', !!caps.can_export);
+  }
+
+  function canEditItemFields(item) {
+    const caps = state.caps || {};
+    if (caps.is_daybookstaff) return true;
+    if (['admin', 'manager'].includes(caps.role)) return true;
+    if (caps.role === 'contributor') {
+      return Number(item.assigned_user_id) === Number(state.me?.id);
+    }
+    return false;
+  }
+
+  function canEditItemStatus() {
+    const caps = state.caps || {};
+    if (caps.is_daybookstaff) return true;
+    return ['admin', 'manager', 'contributor'].includes(caps.role);
+  }
+
+  function canDeleteItem(item) {
+    const caps = state.caps || {};
+    if (caps.is_daybookstaff) return true;
+    if (caps.is_owner && caps.role === 'admin') return true;
+    if (['admin', 'manager'].includes(caps.role)
+      && Number(item.created_by_user_id) === Number(state.me?.id)) return true;
+    return false;
+  }
+
+  function memberLabel(member) {
+    const name = String(member.name ?? '').trim();
+    return name || member.email || '';
+  }
+
+  function memberOptionsHtml(selectedId) {
+    let html = '<option value="">—</option>';
+    for (const m of state.projectMembers) {
+      const sel = String(m.user_id) === String(selectedId) ? 'selected' : '';
+      html += `<option value="${m.user_id}" ${sel}>${escapeHtml(memberLabel(m))}</option>`;
+    }
+    return html;
   }
 
   function sameId(a, b) {
@@ -173,7 +271,10 @@
     renderProjectStrip();
     navigateToProject(project);
     await loadProjectScopedLists();
+    await loadMeAndCaps();
+    await loadProjectMembers();
     await loadItems();
+    applyPermissionUI();
   }
 
   async function loadProjectScopedLists() {
@@ -206,6 +307,7 @@
     const strip = document.getElementById('project-strip');
     const toggle = document.getElementById('project-strip-toggle');
     const nameEl = document.getElementById('project-strip-name');
+    const roleEl = document.getElementById('project-strip-role');
     const menu = document.getElementById('project-strip-menu');
     if (!project || !strip || !toggle || !nameEl || !menu) return;
 
@@ -216,6 +318,17 @@
     toggle.style.backgroundColor = bg;
     toggle.style.color = text;
     nameEl.textContent = project.name;
+
+    const roleLabel = currentProjectRoleLabel();
+    if (roleEl) {
+      roleEl.textContent = roleLabel;
+      roleEl.classList.toggle('hidden', !roleLabel);
+      if (roleLabel) {
+        roleEl.setAttribute('aria-label', `Your role: ${roleLabel}`);
+      } else {
+        roleEl.removeAttribute('aria-label');
+      }
+    }
 
     menu.innerHTML = state.projects.map((p) => {
       const active = sameId(p.id, state.currentProjectId);
@@ -339,19 +452,27 @@
     tr.dataset.id = item.id;
     tr.dataset.priorityId = item.priority_id || '';
 
+    const caps = state.caps || {};
+    const fieldsEditable = canEditItemFields(item);
+    const statusEditable = canEditItemStatus();
+    const assignEditable = !!caps.can_assign_items;
+    const showDelete = canDeleteItem(item);
+    const reorderable = !!caps.can_reorder;
+
     tr.innerHTML = `
       <td class="col-sort">${item.sort_order}</td>
-      <td class="col-category"><select data-field="category_id">${optionsHtml(state.categories, item.category_id)}</select></td>
-      <td class="col-subsystem"><select data-field="subsystem_id">${optionsHtml(state.subsystems, item.subsystem_id)}</select></td>
-      <td class="col-item"><textarea data-field="item_text" rows="1">${escapeHtml(item.item_text)}</textarea></td>
-      <td class="col-url"><input type="text" data-field="url" value="${escapeHtml(item.url)}"></td>
-      <td class="col-project"><select data-field="project_id">${optionsHtml(state.projects, item.project_id, '')}</select></td>
-      <td class="col-priority"><select data-field="priority_id">${optionsHtml(state.priorities, item.priority_id)}</select></td>
-      <td class="col-order">${state.orderBy === 'priority' && item.priority_id ? '<span class="drag-handle" title="Drag to reorder">⠿</span> ' : ''}${item.order_in_priority || ''}</td>
-      <td class="col-status"><select data-field="status_id">${optionsHtml(state.statuses, item.status_id)}</select></td>
+      <td class="col-category"><select data-field="category_id" ${fieldsEditable ? '' : 'disabled'}>${optionsHtml(state.categories, item.category_id)}</select></td>
+      <td class="col-subsystem"><select data-field="subsystem_id" ${fieldsEditable ? '' : 'disabled'}>${optionsHtml(state.subsystems, item.subsystem_id)}</select></td>
+      <td class="col-item"><textarea data-field="item_text" rows="1" ${fieldsEditable ? '' : 'disabled'}>${escapeHtml(item.item_text)}</textarea></td>
+      <td class="col-url"><input type="text" data-field="url" value="${escapeHtml(item.url)}" ${fieldsEditable ? '' : 'disabled'}></td>
+      <td class="col-project"><select data-field="project_id" ${fieldsEditable && caps.is_owner ? '' : 'disabled'}>${optionsHtml(state.projects, item.project_id, '')}</select></td>
+      <td class="col-priority"><select data-field="priority_id" ${fieldsEditable ? '' : 'disabled'}>${optionsHtml(state.priorities, item.priority_id)}</select></td>
+      <td class="col-order">${state.orderBy === 'priority' && item.priority_id && reorderable ? '<span class="drag-handle" title="Drag to reorder">⠿</span> ' : ''}${item.order_in_priority || ''}</td>
+      <td class="col-status"><select data-field="status_id" ${statusEditable ? '' : 'disabled'}>${optionsHtml(state.statuses, item.status_id)}</select></td>
+      <td class="col-assignee"><select data-field="assigned_user_id" ${assignEditable ? '' : 'disabled'}>${memberOptionsHtml(item.assigned_user_id)}</select></td>
       <td class="col-docs"><button class="link-btn detail-btn" data-tab="docs">Docs</button></td>
       <td class="col-notes"><button class="link-btn detail-btn" data-tab="notes">Notes</button></td>
-      <td class="col-actions"><button class="icon-btn delete-item-btn" title="Delete">✕</button></td>
+      <td class="col-actions">${showDelete ? '<button class="icon-btn delete-item-btn" title="Delete">✕</button>' : ''}</td>
     `;
 
     bindRowEvents(tr, item);
@@ -360,26 +481,57 @@
     for (const [field, cfg] of Object.entries(FIELD_COLOR_CONFIG)) {
       const sel = tr.querySelector(`select[data-field="${field}"]`);
       paintColorSelect(sel, state[cfg.list], sel.value, cfg.mode);
+      bindColoredSelectDropdown(sel);
     }
     return tr;
   }
 
   function paintColorSelect(selectEl, list, selectedId, mode) {
     if (!selectEl) return;
+    const cell = selectEl.closest('td');
     const opt = list.find((o) => String(o.id) === String(selectedId));
     const bg = (opt && opt.bg_color) || '';
     const text = (opt && opt.text_color) || '';
-    const cell = selectEl.closest('td');
-    if (mode === 'fill-cell') {
-      if (cell) { cell.style.backgroundColor = bg; cell.style.color = text; }
-      selectEl.style.backgroundColor = 'transparent';
-      selectEl.style.color = text;
-      selectEl.classList.remove('color-pill');
+
+    selectEl.style.backgroundColor = '';
+    selectEl.style.color = '';
+    selectEl.classList.remove('color-pill');
+
+    if (!cell) return;
+
+    cell.classList.remove('cell-colored', 'cell-fill', 'select-menu-open');
+    if (bg || text) {
+      cell.classList.add('cell-colored');
+      if (mode === 'fill-cell') cell.classList.add('cell-fill');
+      cell.style.setProperty('--cell-bg', bg || 'transparent');
+      cell.style.setProperty('--cell-text', text || 'inherit');
     } else {
-      selectEl.style.backgroundColor = bg;
-      selectEl.style.color = text;
-      selectEl.classList.toggle('color-pill', !!bg);
+      cell.style.removeProperty('--cell-bg');
+      cell.style.removeProperty('--cell-text');
     }
+  }
+
+  function bindColoredSelectDropdown(selectEl) {
+    if (!selectEl || selectEl.dataset.dropdownNeutral) return;
+    selectEl.dataset.dropdownNeutral = '1';
+
+    const repaint = () => {
+      const cfg = FIELD_COLOR_CONFIG[selectEl.dataset.field];
+      if (cfg) paintColorSelect(selectEl, state[cfg.list], selectEl.value, cfg.mode);
+    };
+
+    const openMenu = () => {
+      selectEl.closest('td')?.classList.add('select-menu-open');
+    };
+    const closeMenu = () => {
+      selectEl.closest('td')?.classList.remove('select-menu-open');
+      repaint();
+    };
+
+    selectEl.addEventListener('mousedown', openMenu);
+    selectEl.addEventListener('focus', openMenu);
+    selectEl.addEventListener('change', closeMenu);
+    selectEl.addEventListener('blur', closeMenu);
   }
 
   function autoResizeTextarea(ta) {
@@ -409,7 +561,7 @@
       el.addEventListener('blur', () => saveItemField(item.id, el.dataset.field, el.value));
     });
 
-    tr.querySelector('.delete-item-btn').addEventListener('click', async () => {
+    tr.querySelector('.delete-item-btn')?.addEventListener('click', async () => {
       if (!confirm('Delete this item?')) return;
       try {
         await del(`/api/items?id=${item.id}`);
@@ -531,8 +683,28 @@
     document.getElementById('manage-priorities-btn').addEventListener('click', () => openOptionModal('priorities'));
     document.getElementById('manage-statuses-btn').addEventListener('click', () => openOptionModal('statuses'));
     document.getElementById('manage-projects-btn').addEventListener('click', () => openOptionModal('projects'));
+    document.getElementById('manage-members-btn').addEventListener('click', openMembersModal);
+    document.getElementById('export-btn').addEventListener('click', () => {
+      window.location.href = `/api/export?project_id=${state.currentProjectId}`;
+    });
+
+    document.getElementById('members-modal-close').addEventListener('click', closeMembersModal);
+    document.getElementById('invite-form').addEventListener('submit', submitInvite);
+    document.getElementById('copy-invite-link').addEventListener('click', copyInviteLink);
 
     document.getElementById('option-modal-close').addEventListener('click', closeOptionModal);
+    document.getElementById('option-modal-sync-palette').addEventListener('click', async () => {
+      if (!confirm('Apply the current priority palette to all priorities in this project? Custom colors will be overwritten.')) return;
+      try {
+        await patch('/api/priorities', { action: 'sync_palette', project_id: state.currentProjectId });
+        await refreshOptionList('priorities');
+        renderOptionModalList();
+        await loadItems();
+        toast('Priority colors updated');
+      } catch (err) {
+        toast(err.message, true);
+      }
+    });
     document.getElementById('detail-modal-close').addEventListener('click', closeDetailModal);
   }
 
@@ -551,6 +723,17 @@
     currentOptionType = type;
     const cfg = OPTION_CONFIG[type];
     document.getElementById('option-modal-title').textContent = cfg.title;
+    const addForm = document.getElementById('option-modal-add-form');
+    const canAdd = type === 'projects'
+      ? (state.me?.is_daybookstaff || state.caps?.role === 'admin' || !state.projects.length)
+      : type === 'statuses'
+        ? !!state.me?.is_daybookstaff
+        : !!state.caps?.can_edit_metadata;
+    addForm.classList.toggle('hidden', !canAdd);
+    const paletteRow = document.getElementById('option-modal-palette-row');
+    if (paletteRow) {
+      paletteRow.classList.toggle('hidden', type !== 'priorities' || !state.caps?.can_edit_metadata);
+    }
     renderOptionModalList();
     document.getElementById('option-modal').classList.remove('hidden');
 
@@ -593,12 +776,12 @@
       li.dataset.id = opt.id;
       li.innerHTML = `
         <span class="drag-handle" title="Drag to reorder">⠿</span>
-        <input type="text" class="option-name-input" value="${escapeHtml(opt.name)}">
+        <input type="text" class="option-name-input" value="${escapeHtml(opt.name)}" ${canEditOptionRow(opt) ? '' : 'disabled'}>
         ${cfg.hasColor ? `
-          <button type="button" class="icon-btn color-btn bucket-btn" title="Background color" style="background:${opt.bg_color || 'transparent'}"><i class="fa-solid fa-fill-drip"></i></button>
-          <button type="button" class="icon-btn color-btn text-btn" title="Text color" style="color:${opt.text_color || 'inherit'}"><i class="fa-solid fa-font"></i></button>
+          <button type="button" class="icon-btn color-btn bucket-btn" title="Background color" style="background:${opt.bg_color || 'transparent'}" ${canEditOptionRow(opt) ? '' : 'disabled'}><i class="fa-solid fa-fill-drip"></i></button>
+          <button type="button" class="icon-btn color-btn text-btn" title="Text color" style="color:${opt.text_color || 'inherit'}" ${canEditOptionRow(opt) ? '' : 'disabled'}><i class="fa-solid fa-font"></i></button>
         ` : ''}
-        <button class="icon-btn delete-option-btn" title="Delete">✕</button>
+        ${canDeleteOptionRow(opt) ? '<button class="icon-btn delete-option-btn" title="Delete">✕</button>' : ''}
       `;
       li.querySelector('.option-name-input').addEventListener('change', async (e) => {
         try {
@@ -637,7 +820,7 @@
           });
         });
       }
-      li.querySelector('.delete-option-btn').addEventListener('click', async () => {
+      li.querySelector('.delete-option-btn')?.addEventListener('click', async () => {
         const extra = currentOptionType === 'projects' ? ' and all its items' : '';
         if (!confirm(`Delete "${opt.name}"${extra}?`)) return;
         try {
@@ -670,6 +853,20 @@
         }
       },
     });
+  }
+
+  function canEditOptionRow(opt) {
+    if (currentOptionType === 'statuses') return !!state.me?.is_daybookstaff;
+    if (currentOptionType === 'projects') return !!state.caps?.can_edit_project || !!state.me?.is_daybookstaff;
+    return !!state.caps?.can_edit_metadata;
+  }
+
+  function canDeleteOptionRow(opt) {
+    if (currentOptionType === 'projects') {
+      if (state.me?.is_daybookstaff) return true;
+      return !!opt.is_owner && state.caps?.role === 'admin';
+    }
+    return canEditOptionRow(opt);
   }
 
   function closeOptionModal() {
@@ -816,6 +1013,130 @@
   function closeDetailModal() {
     document.getElementById('detail-modal').classList.add('hidden');
     state.detailItemId = null;
+  }
+
+  // ---------- members modal ----------
+
+  async function openMembersModal() {
+    document.getElementById('members-modal').classList.remove('hidden');
+    document.getElementById('invite-link-row').classList.add('hidden');
+    await renderMembersModal();
+  }
+
+  function closeMembersModal() {
+    document.getElementById('members-modal').classList.add('hidden');
+  }
+
+  async function renderMembersModal() {
+    const [members, invites] = await Promise.all([
+      get(`/api/members?project_id=${state.currentProjectId}`),
+      get(`/api/invites?project_id=${state.currentProjectId}`),
+    ]);
+    state.projectMembers = members;
+
+    const ul = document.getElementById('members-list');
+    ul.innerHTML = '';
+    for (const m of members) {
+      const li = document.createElement('li');
+      li.className = 'member-row';
+      const roleSelect = ['admin', 'manager', 'contributor', 'viewer'].map((r) =>
+        `<option value="${r}" ${m.role === r ? 'selected' : ''}>${r}</option>`
+      ).join('');
+      li.innerHTML = `
+        <span>${escapeHtml(memberLabel(m))}${m.is_owner ? ' (owner)' : ''}</span>
+        <select class="member-role-select" data-member-id="${m.id}" ${m.is_owner ? 'disabled' : ''}>${roleSelect}</select>
+        ${!m.is_owner ? `<button type="button" class="link-btn remove-member-btn" data-member-id="${m.id}">Remove</button>` : ''}
+        ${m.is_owner ? `<button type="button" class="link-btn transfer-owner-btn" data-user-id="${m.user_id}">Transfer ownership</button>` : ''}
+      `;
+      li.querySelector('.member-role-select')?.addEventListener('change', async (e) => {
+        try {
+          await put('/api/members', { id: Number(e.target.dataset.memberId), role: e.target.value });
+          toast('Role updated');
+        } catch (err) {
+          toast(err.message, true);
+        }
+      });
+      li.querySelector('.remove-member-btn')?.addEventListener('click', async () => {
+        if (!confirm(`Remove ${memberLabel(m)} from this project?`)) return;
+        try {
+          await del(`/api/members?id=${m.id}`);
+          await renderMembersModal();
+        } catch (err) {
+          toast(err.message, true);
+        }
+      });
+      li.querySelector('.transfer-owner-btn')?.addEventListener('click', async () => {
+        const target = members.find((x) => !x.is_owner && x.user_id !== m.user_id);
+        if (!target) {
+          toast('Add another member before transferring ownership', true);
+          return;
+        }
+        const pick = prompt(`Transfer ownership to which user id? Other members:\n${
+          members.filter((x) => !x.is_owner).map((x) => `${x.user_id}: ${memberLabel(x)}`).join('\n')
+        }`);
+        if (!pick) return;
+        try {
+          await patch('/api/members', { project_id: state.currentProjectId, new_owner_user_id: Number(pick) });
+          toast('Ownership transferred');
+          await renderMembersModal();
+          await loadMeAndCaps();
+        } catch (err) {
+          toast(err.message, true);
+        }
+      });
+      ul.appendChild(li);
+    }
+
+    const invUl = document.getElementById('invites-list');
+    invUl.innerHTML = '';
+    for (const inv of invites) {
+      const li = document.createElement('li');
+      li.innerHTML = `
+        <span>${escapeHtml(inv.email)} (${inv.role})</span>
+        <button type="button" class="link-btn copy-pending-invite" data-url="${escapeHtml(inv.invite_url)}">Copy link</button>
+        <button type="button" class="link-btn revoke-invite-btn" data-id="${inv.id}">Revoke</button>
+      `;
+      li.querySelector('.copy-pending-invite').addEventListener('click', async () => {
+        await navigator.clipboard.writeText(inv.invite_url);
+        toast('Invite link copied');
+      });
+      li.querySelector('.revoke-invite-btn').addEventListener('click', async () => {
+        try {
+          await del(`/api/invites?id=${inv.id}`);
+          await renderMembersModal();
+        } catch (err) {
+          toast(err.message, true);
+        }
+      });
+      invUl.appendChild(li);
+    }
+  }
+
+  async function submitInvite(e) {
+    e.preventDefault();
+    const email = document.getElementById('invite-email').value.trim();
+    const role = document.getElementById('invite-role').value;
+    try {
+      const created = await post('/api/invites', {
+        project_id: state.currentProjectId,
+        email,
+        role,
+      });
+      document.getElementById('invite-link-url').value = created.invite_url;
+      document.getElementById('invite-link-row').classList.remove('hidden');
+      document.getElementById('invite-email').value = '';
+      await renderMembersModal();
+      toast('Invite created — copy the link');
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  async function copyInviteLink() {
+    const url = document.getElementById('invite-link-url').value;
+    if (!url) return;
+    await navigator.clipboard.writeText(url);
+    toast('Invite link copied');
   }
 
   document.addEventListener('DOMContentLoaded', init);

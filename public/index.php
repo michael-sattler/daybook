@@ -8,11 +8,15 @@ ob_start();
   <div class="project-strip-control">
     <button type="button" id="project-strip-toggle" class="project-strip-toggle" aria-expanded="false" aria-haspopup="listbox">
       <span id="project-strip-name" class="project-strip-name"></span>
+      <span id="project-strip-role" class="project-strip-role hidden"></span>
       <span class="project-strip-chevron" aria-hidden="true">▾</span>
     </button>
     <ul id="project-strip-menu" class="project-strip-menu hidden" role="listbox"></ul>
   </div>
-  <button type="button" id="manage-projects-btn" class="icon-btn project-strip-manage-btn" title="Manage projects" aria-label="Manage projects">⚙</button>
+  <div class="project-strip-actions">
+    <button type="button" id="manage-members-btn" class="icon-btn project-strip-manage-btn hidden" title="Project members" aria-label="Project members">👥</button>
+    <button type="button" id="manage-projects-btn" class="icon-btn project-strip-manage-btn" title="Manage projects" aria-label="Manage projects">⚙</button>
+  </div>
 </div>
 
 <div class="filterbar">
@@ -20,6 +24,7 @@ ob_start();
   <select id="filter-category"><option value="">All Categories</option></select>
   <select id="filter-priority"><option value="">All Priorities</option></select>
   <select id="filter-status"><option value="">All Statuses</option></select>
+  <button id="export-btn" class="link-btn" type="button">Export CSV</button>
   <button id="manage-categories-btn" class="link-btn">Edit Categories</button>
   <button id="manage-subsystems-btn" class="link-btn">Edit Subsystems</button>
   <button id="manage-priorities-btn" class="link-btn">Edit Priorities</button>
@@ -41,6 +46,7 @@ ob_start();
         <th class="col-priority">Priority</th>
         <th class="col-order">Order</th>
         <th class="col-status">Status</th>
+        <th class="col-assignee">Assignee</th>
         <th class="col-docs">Docs</th>
         <th class="col-notes">Notes</th>
         <th class="col-actions"></th>
@@ -63,6 +69,10 @@ ob_start();
       <input type="text" id="option-modal-new-name" placeholder="New value...">
       <button type="submit">Add</button>
     </form>
+    <p id="option-modal-palette-row" class="option-modal-extra hidden">
+      <button type="button" id="option-modal-sync-palette" class="link-btn">Apply priority palette from code</button>
+      <span class="option-modal-hint">Updates colors for all priorities in this project from <code>functions-colors.php</code>.</span>
+    </p>
     <div class="modal-actions">
       <button id="option-modal-close" class="primary">Done</button>
     </div>
@@ -96,6 +106,33 @@ ob_start();
 
     <div class="modal-actions">
       <button id="detail-modal-close" class="primary">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Project members modal -->
+<div id="members-modal" class="modal-overlay hidden">
+  <div class="modal-box modal-wide">
+    <h2>Project members</h2>
+    <ul id="members-list" class="member-list"></ul>
+    <h3>Pending invites</h3>
+    <ul id="invites-list" class="member-list"></ul>
+    <form id="invite-form" class="inline-form">
+      <input type="email" id="invite-email" placeholder="Email to invite" required>
+      <select id="invite-role">
+        <option value="admin">Admin</option>
+        <option value="manager">Manager</option>
+        <option value="contributor" selected>Contributor</option>
+        <option value="viewer">Viewer</option>
+      </select>
+      <button type="submit">Create invite link</button>
+    </form>
+    <p id="invite-link-row" class="hidden">
+      <input type="text" id="invite-link-url" readonly>
+      <button type="button" id="copy-invite-link" class="link-btn">Copy link</button>
+    </p>
+    <div class="modal-actions">
+      <button id="members-modal-close" class="primary">Done</button>
     </div>
   </div>
 </div>

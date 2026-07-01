@@ -15,6 +15,9 @@
           <button type="button" id="user-menu-projects" class="user-menu-option" role="menuitem">Edit projects</button>
         </li>
         <li role="none">
+          <a href="/account" class="user-menu-option" role="menuitem">Account settings</a>
+        </li>
+        <li role="none">
           <a href="/logout" class="user-menu-option" role="menuitem">Log out</a>
         </li>
       </ul>
