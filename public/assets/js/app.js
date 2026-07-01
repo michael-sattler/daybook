@@ -124,7 +124,7 @@
     state.currentProjectId = Number(initialProject.id);
     setProjectCookie(initialProject);
     navigateToProject(initialProject, { replace: true });
-    renderProjectSelect();
+    renderProjectStrip();
     await loadProjectScopedLists();
     await loadItems();
     bindGlobalEvents();
@@ -169,7 +169,8 @@
     if (!project) return;
     state.currentProjectId = Number(project.id);
     setProjectCookie(project);
-    renderProjectSelect();
+    closeProjectStripMenu();
+    renderProjectStrip();
     navigateToProject(project);
     await loadProjectScopedLists();
     await loadItems();
@@ -200,11 +201,64 @@
 
   // ---------- rendering ----------
 
-  function renderProjectSelect() {
-    const sel = document.getElementById('project-select');
-    sel.innerHTML = state.projects
-      .map((p) => `<option value="${p.id}" ${sameId(p.id, state.currentProjectId) ? 'selected' : ''}>${escapeHtml(p.name)}</option>`)
-      .join('');
+  function renderProjectStrip() {
+    const project = findProject(state.currentProjectId);
+    const strip = document.getElementById('project-strip');
+    const toggle = document.getElementById('project-strip-toggle');
+    const nameEl = document.getElementById('project-strip-name');
+    const menu = document.getElementById('project-strip-menu');
+    if (!project || !strip || !toggle || !nameEl || !menu) return;
+
+    const bg = project.bg_color || '#e5e7eb';
+    const text = project.text_color || '#1f2937';
+    strip.style.backgroundColor = bg;
+    strip.style.color = text;
+    toggle.style.backgroundColor = bg;
+    toggle.style.color = text;
+    nameEl.textContent = project.name;
+
+    menu.innerHTML = state.projects.map((p) => {
+      const active = sameId(p.id, state.currentProjectId);
+      const swatch = p.bg_color || '#e5e7eb';
+      return `<li role="presentation"><button type="button" class="project-strip-option${active ? ' active' : ''}" data-project-id="${p.id}" role="option" aria-selected="${active}">
+        <span class="project-strip-swatch" style="background:${swatch}"></span>${escapeHtml(p.name)}
+      </button></li>`;
+    }).join('');
+    if (!menu.classList.contains('hidden')) positionProjectStripMenu();
+  }
+
+  function positionProjectStripMenu() {
+    const chevron = document.querySelector('.project-strip-chevron');
+    const menu = document.getElementById('project-strip-menu');
+    const control = document.querySelector('.project-strip-control');
+    if (!chevron || !menu || !control) return;
+    const chevronRect = chevron.getBoundingClientRect();
+    const controlRect = control.getBoundingClientRect();
+    const caretCenter = chevronRect.left + chevronRect.width / 2 - controlRect.left;
+    menu.style.left = `${caretCenter}px`;
+    menu.style.right = 'auto';
+    menu.style.transform = 'translateX(-50%)';
+  }
+
+  function closeProjectStripMenu() {
+    const menu = document.getElementById('project-strip-menu');
+    const toggle = document.getElementById('project-strip-toggle');
+    if (menu) menu.classList.add('hidden');
+    if (toggle) toggle.setAttribute('aria-expanded', 'false');
+  }
+
+  function toggleProjectStripMenu() {
+    const menu = document.getElementById('project-strip-menu');
+    const toggle = document.getElementById('project-strip-toggle');
+    if (!menu || !toggle) return;
+    const opening = menu.classList.contains('hidden');
+    if (opening) {
+      menu.classList.remove('hidden');
+      positionProjectStripMenu();
+      toggle.setAttribute('aria-expanded', 'true');
+    } else {
+      closeProjectStripMenu();
+    }
   }
 
   function renderFilterSelects() {
@@ -371,8 +425,18 @@
   // ---------- top-level controls ----------
 
   function bindGlobalEvents() {
-    document.getElementById('project-select').addEventListener('change', (e) => {
-      switchProject(e.target.value);
+    document.getElementById('project-strip-toggle').addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleProjectStripMenu();
+    });
+    document.getElementById('project-strip-menu').addEventListener('click', async (e) => {
+      const btn = e.target.closest('[data-project-id]');
+      if (!btn) return;
+      closeProjectStripMenu();
+      await switchProject(btn.dataset.projectId);
+    });
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#project-strip')) closeProjectStripMenu();
     });
 
     window.addEventListener('popstate', async () => {
@@ -477,7 +541,7 @@
     const cfg = OPTION_CONFIG[type];
     const url = cfg.projectScoped ? `${cfg.endpoint}?project_id=${state.currentProjectId}` : cfg.endpoint;
     state[type] = await get(url);
-    if (type === 'projects') renderProjectSelect();
+    if (type === 'projects') renderProjectStrip();
     renderFilterSelects();
     renderItems();
   }
@@ -546,7 +610,7 @@
             if (sameId(state.currentProjectId, opt.id)) {
               navigateToProject(state.projects[0], { reload: true });
             }
-            renderProjectSelect();
+            renderProjectStrip();
           }
           await refreshOptionList(currentOptionType);
           renderOptionModalList();

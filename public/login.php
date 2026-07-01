@@ -13,7 +13,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 ob_start();
 ?>
   <form class="login-box" method="post">
-    <h1>Daybook</h1>
+    <img src="/assets/images/logo-square.png" alt="Daybook" class="login-logo">
     <?php if ($error): ?><p class="error"><?= htmlspecialchars($error) ?></p><?php endif; ?>
     <input type="password" name="password" placeholder="Password" autofocus required>
     <button type="submit">Log In</button>

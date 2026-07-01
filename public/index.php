@@ -4,6 +4,16 @@ require_login();
 
 ob_start();
 ?>
+<div class="project-strip" id="project-strip">
+  <div class="project-strip-control">
+    <button type="button" id="project-strip-toggle" class="project-strip-toggle" aria-expanded="false" aria-haspopup="listbox">
+      <span id="project-strip-name" class="project-strip-name"></span>
+      <span class="project-strip-chevron" aria-hidden="true">▾</span>
+    </button>
+    <ul id="project-strip-menu" class="project-strip-menu hidden" role="listbox"></ul>
+  </div>
+</div>
+
 <div class="filterbar">
   <input type="text" id="filter-q" placeholder="Search item / subsystem / URL...">
   <select id="filter-category"><option value="">All Categories</option></select>
