@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS users (
   name VARCHAR(100) NULL,
   password_hash VARCHAR(255) NOT NULL,
   is_daybookstaff TINYINT(1) NOT NULL DEFAULT 0,
+  invite_stub TINYINT(1) NOT NULL DEFAULT 0,
   created_at INT NOT NULL,
   UNIQUE KEY uniq_users_email (email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

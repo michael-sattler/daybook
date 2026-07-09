@@ -40,13 +40,24 @@ function sql_project_owner_user_id_expr(string $projectAlias = 'p'): string {
     ))";
 }
 
-function sql_project_owner_assignee_name(string $ownerAlias = 'ou'): string {
-    return "COALESCE(NULLIF(TRIM({$ownerAlias}.name), ''), 'Project Owner')";
+function sql_project_owner_assignee_name(string $directOwnerAlias = 'ou_direct'): string {
+    return "COALESCE(
+        NULLIF(TRIM({$directOwnerAlias}.name), ''),
+        (
+            SELECT NULLIF(TRIM(u2.name), '')
+            FROM project_members pm2
+            INNER JOIN users u2 ON u2.id = pm2.user_id
+            WHERE pm2.project_id = p.id AND pm2.role = 'admin'
+            ORDER BY pm2.created_at, pm2.id
+            LIMIT 1
+        ),
+        'Project Owner'
+    )";
 }
 
 /** SQL expression: assignee display name for an item row. */
 function sql_item_assignee_name(): string {
-    $ownerLabel = sql_project_owner_assignee_name('ou');
+    $ownerLabel = sql_project_owner_assignee_name('ou_direct');
     $ownerExpr = sql_project_owner_user_id_expr('p');
     return "CASE WHEN i.assigned_to_project_owner = 1 THEN
                 CASE WHEN ({$ownerExpr}) IS NULL THEN '--'

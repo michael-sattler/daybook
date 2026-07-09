@@ -14,18 +14,7 @@ if ($method === 'GET') {
     if (!$projectId) fail('project_id is required');
     permissions_require_project_access($mysqli, $projectId);
 
-    $stmt = $mysqli->prepare(
-        'SELECT pm.id, pm.user_id, pm.role, pm.created_at, u.email, u.name,
-                (' . sql_project_owner_user_id_expr('p') . ' = pm.user_id) AS is_owner
-         FROM project_members pm
-         INNER JOIN users u ON u.id = pm.user_id
-         INNER JOIN projects p ON p.id = pm.project_id
-         WHERE pm.project_id = ?
-         ORDER BY pm.role, u.email'
-    );
-    $stmt->bind_param('i', $projectId);
-    $stmt->execute();
-    respond($stmt->get_result()->fetch_all(MYSQLI_ASSOC));
+    respond(permissions_project_members_list($mysqli, $projectId));
 }
 
 if ($method === 'PUT') {

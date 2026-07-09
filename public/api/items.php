@@ -51,8 +51,20 @@ function item_select_sql(): string {
                    p.bg_color AS project_bg_color, p.text_color AS project_text_color,
                    {$ownerExpr} AS project_owner_user_id,
                    i.created_by_user_id, i.assigned_user_id, i.assigned_to_project_owner,
+                   " . sql_project_owner_assignee_name('ou_direct') . " AS project_owner_assignee_label,
                    " . sql_item_assignee_name() . " AS assignee_name,
-                   CASE WHEN i.assigned_to_project_owner = 1 THEN ou.email
+                   CASE WHEN i.assigned_to_project_owner = 1 THEN
+                        COALESCE(
+                            ou_direct.email,
+                            (
+                                SELECT u2.email
+                                FROM project_members pm2
+                                INNER JOIN users u2 ON u2.id = pm2.user_id
+                                WHERE pm2.project_id = p.id AND pm2.role = 'admin'
+                                ORDER BY pm2.created_at, pm2.id
+                                LIMIT 1
+                            )
+                        )
                         ELSE u.email
                    END AS assignee_email,
                    i.category_id, c.name AS category_name,
@@ -68,7 +80,7 @@ function item_select_sql(): string {
             FROM items i
             LEFT JOIN projects p ON p.id = i.project_id
             LEFT JOIN users u ON u.id = i.assigned_user_id
-            LEFT JOIN users ou ON ou.id = {$ownerExpr}
+            LEFT JOIN users ou_direct ON ou_direct.id = p.owner_user_id
             LEFT JOIN categories c ON c.id = i.category_id
             LEFT JOIN subsystems sub ON sub.id = i.subsystem_id
             LEFT JOIN priorities pr ON pr.id = i.priority_id

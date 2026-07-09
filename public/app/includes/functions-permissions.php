@@ -41,7 +41,110 @@ function permissions_project_owner_display_name(mysqli $mysqli, int $projectId):
     $stmt->bind_param('i', $ownerId);
     $stmt->execute();
     $row = $stmt->get_result()->fetch_assoc();
-    return trim((string)($row['name'] ?? ''));
+    $name = trim((string)($row['name'] ?? ''));
+    return $name;
+}
+
+function permissions_project_owner_assignee_label(mysqli $mysqli, int $projectId): string {
+    $name = permissions_project_owner_display_name($mysqli, $projectId);
+    return $name !== '' ? $name : 'Project Owner';
+}
+
+function permissions_project_members_list(mysqli $mysqli, int $projectId): array {
+    $ownerExpr = sql_project_owner_user_id_expr('p');
+    $stmt = $mysqli->prepare(
+        "SELECT pm.id, pm.user_id, pm.role, pm.created_at, u.email, u.name,
+                ({$ownerExpr} = pm.user_id) AS is_owner, 0 AS pending_invite
+         FROM project_members pm
+         INNER JOIN users u ON u.id = pm.user_id
+         INNER JOIN projects p ON p.id = pm.project_id
+         WHERE pm.project_id = ?
+         ORDER BY pm.role, u.email"
+    );
+    $stmt->bind_param('i', $projectId);
+    $stmt->execute();
+    return $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+}
+
+/** Ensure every pending invite has a users row so items can reference assigned_user_id. */
+function permissions_sync_pending_invite_users(mysqli $mysqli, int $projectId): void {
+    $stmt = $mysqli->prepare(
+        'SELECT pi.email
+         FROM project_invites pi
+         WHERE pi.project_id = ? AND pi.accepted_at IS NULL'
+    );
+    $stmt->bind_param('i', $projectId);
+    $stmt->execute();
+    $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    foreach ($rows as $row) {
+        permissions_ensure_user_for_invite_email($mysqli, $row['email']);
+    }
+}
+
+/** Find or create a placeholder user for a pending invite email. */
+function permissions_ensure_user_for_invite_email(mysqli $mysqli, string $email): int {
+    $email = strtolower(trim($email));
+    $stmt = $mysqli->prepare('SELECT id FROM users WHERE email = ?');
+    $stmt->bind_param('s', $email);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    if ($row) {
+        return (int)$row['id'];
+    }
+
+    $now = time();
+    $hash = password_hash(bin2hex(random_bytes(32)), PASSWORD_DEFAULT);
+    $staff = 0;
+    $stub = 1;
+    $ins = $mysqli->prepare(
+        'INSERT INTO users (email, password_hash, is_daybookstaff, invite_stub, created_at) VALUES (?,?,?,?,?)'
+    );
+    $ins->bind_param('ssiii', $email, $hash, $staff, $stub, $now);
+    $ins->execute();
+    return (int)$mysqli->insert_id;
+}
+
+/** Members plus pending invitees (for assignee dropdown). */
+function permissions_project_assignee_options_list(mysqli $mysqli, int $projectId): array {
+    permissions_sync_pending_invite_users($mysqli, $projectId);
+    $members = permissions_project_members_list($mysqli, $projectId);
+    $memberUserIds = [];
+    foreach ($members as $member) {
+        $memberUserIds[(int)$member['user_id']] = true;
+    }
+
+    $stmt = $mysqli->prepare(
+        'SELECT pi.id AS invite_id, pi.email, pi.role, pi.created_at,
+                u.id AS user_id, u.name
+         FROM project_invites pi
+         INNER JOIN users u ON LOWER(u.email) = LOWER(pi.email)
+         WHERE pi.project_id = ? AND pi.accepted_at IS NULL
+         ORDER BY pi.email'
+    );
+    $stmt->bind_param('i', $projectId);
+    $stmt->execute();
+    $pending = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+
+    $assignees = $members;
+    foreach ($pending as $row) {
+        $userId = (int)$row['user_id'];
+        if (isset($memberUserIds[$userId])) {
+            continue;
+        }
+        $assignees[] = [
+            'id' => null,
+            'user_id' => $userId,
+            'role' => $row['role'],
+            'created_at' => $row['created_at'],
+            'email' => $row['email'],
+            'name' => $row['name'],
+            'is_owner' => 0,
+            'pending_invite' => 1,
+            'invite_id' => (int)$row['invite_id'],
+        ];
+    }
+
+    return $assignees;
 }
 
 function permissions_is_project_owner(mysqli $mysqli, int $projectId, int $userId): bool {
@@ -352,6 +455,7 @@ function permissions_project_caps(mysqli $mysqli, int $projectId): array {
         'is_owner' => $isOwner,
         'owner_user_id' => permissions_project_owner_id($mysqli, $projectId),
         'owner_name' => permissions_project_owner_display_name($mysqli, $projectId),
+        'project_owner_assignee_label' => permissions_project_owner_assignee_label($mysqli, $projectId),
         'can_edit_project' => permissions_can_edit_project($mysqli, $projectId),
         'can_delete_project' => permissions_can_delete_project($mysqli, $projectId),
         'can_manage_members' => permissions_can_manage_members($mysqli, $projectId),
@@ -424,22 +528,24 @@ function accept_project_invite(mysqli $mysqli, string $token, string $password):
     }
 
     $email = strtolower($invite['email']);
-    $check = $mysqli->prepare('SELECT id FROM users WHERE email = ?');
+    permissions_ensure_user_for_invite_email($mysqli, $email);
+    $check = $mysqli->prepare('SELECT id, invite_stub FROM users WHERE email = ?');
     $check->bind_param('s', $email);
     $check->execute();
-    if ($check->get_result()->fetch_row()) {
+    $userRow = $check->get_result()->fetch_assoc();
+    if (!$userRow) {
+        return ['error' => 'Could not create account', 'code' => 500];
+    }
+    $userId = (int)$userRow['id'];
+    if (!(int)$userRow['invite_stub']) {
         return ['error' => 'An account with this email already exists. Log in instead.', 'code' => 400];
     }
 
     $now = time();
     $hash = password_hash($password, PASSWORD_DEFAULT);
-    $isStaff = 0;
-    $uStmt = $mysqli->prepare(
-        'INSERT INTO users (email, password_hash, is_daybookstaff, created_at) VALUES (?,?,?,?)'
-    );
-    $uStmt->bind_param('ssii', $email, $hash, $isStaff, $now);
+    $uStmt = $mysqli->prepare('UPDATE users SET password_hash = ?, invite_stub = 0 WHERE id = ?');
+    $uStmt->bind_param('si', $hash, $userId);
     $uStmt->execute();
-    $userId = (int)$mysqli->insert_id;
 
     $projectId = (int)$invite['project_id'];
     $role = $invite['role'];

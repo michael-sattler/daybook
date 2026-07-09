@@ -74,6 +74,8 @@ if ($method === 'POST') {
         fail('A pending invite already exists for this email');
     }
 
+    permissions_ensure_user_for_invite_email($mysqli, $email);
+
     $token = permissions_generate_token();
     $now = time();
     $expiresAt = $now + (60 * 60 * 24 * 30);

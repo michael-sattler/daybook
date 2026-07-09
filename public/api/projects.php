@@ -54,6 +54,7 @@ if ($method === 'GET') {
         $row['is_owner'] = (int)$row['owner_user_id'] === $userId;
         $row['resolved_owner_user_id'] = permissions_project_owner_id($mysqli, $pid);
         $row['owner_name'] = permissions_project_owner_display_name($mysqli, $pid);
+        $row['project_owner_assignee_label'] = permissions_project_owner_assignee_label($mysqli, $pid);
     }
     unset($row);
     respond($rows);

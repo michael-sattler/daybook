@@ -19,6 +19,8 @@ if ($method === 'GET') {
     if ($projectId) {
         permissions_require_project_access($mysqli, $projectId);
         $payload['caps'] = permissions_project_caps($mysqli, $projectId);
+        $payload['project_members'] = permissions_project_members_list($mysqli, $projectId);
+        $payload['project_assignees'] = permissions_project_assignee_options_list($mysqli, $projectId);
     }
     respond($payload);
 }
