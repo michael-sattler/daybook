@@ -37,17 +37,57 @@ function permissions_project_owner_display_name(mysqli $mysqli, int $projectId):
     if (!$ownerId) {
         return '';
     }
-    $stmt = $mysqli->prepare('SELECT name FROM users WHERE id = ?');
+    $stmt = $mysqli->prepare('SELECT name, email FROM users WHERE id = ?');
     $stmt->bind_param('i', $ownerId);
     $stmt->execute();
     $row = $stmt->get_result()->fetch_assoc();
     $name = trim((string)($row['name'] ?? ''));
-    return $name;
+    if ($name !== '') {
+        return $name;
+    }
+    return trim((string)($row['email'] ?? ''));
 }
 
 function permissions_project_owner_assignee_label(mysqli $mysqli, int $projectId): string {
     $name = permissions_project_owner_display_name($mysqli, $projectId);
     return $name !== '' ? $name : 'Project Owner';
+}
+
+/** If the logged-in user has a pending invite, add them to project_members. */
+function permissions_apply_pending_invites_for_user(mysqli $mysqli, int $projectId, int $userId): void {
+    $user = permissions_load_user($mysqli, $userId);
+    if (!$user) {
+        return;
+    }
+    if (permissions_member_role($mysqli, $projectId, $userId)) {
+        return;
+    }
+
+    $email = strtolower($user['email']);
+    $stmt = $mysqli->prepare(
+        'SELECT id, role FROM project_invites
+         WHERE project_id = ? AND LOWER(email) = ? AND accepted_at IS NULL
+         ORDER BY created_at DESC LIMIT 1'
+    );
+    $stmt->bind_param('is', $projectId, $email);
+    $stmt->execute();
+    $invite = $stmt->get_result()->fetch_assoc();
+    if (!$invite) {
+        return;
+    }
+
+    $now = time();
+    $role = $invite['role'];
+    $insert = $mysqli->prepare(
+        'INSERT IGNORE INTO project_members (project_id, user_id, role, created_at) VALUES (?,?,?,?)'
+    );
+    $insert->bind_param('iisi', $projectId, $userId, $role, $now);
+    $insert->execute();
+
+    $inviteId = (int)$invite['id'];
+    $upd = $mysqli->prepare('UPDATE project_invites SET accepted_at = ? WHERE id = ?');
+    $upd->bind_param('ii', $now, $inviteId);
+    $upd->execute();
 }
 
 /** Add project_members rows for accepted invites that never got membership. */
@@ -76,6 +116,10 @@ function permissions_repair_accepted_invite_members(mysqli $mysqli, int $project
 /** Ensure stored owner and at least one admin member exist for assignee/owner resolution. */
 function permissions_repair_project_membership(mysqli $mysqli, int $projectId): void {
     permissions_repair_accepted_invite_members($mysqli, $projectId);
+    $uid = current_user_id();
+    if ($uid) {
+        permissions_apply_pending_invites_for_user($mysqli, $projectId, $uid);
+    }
 
     $ownerStmt = $mysqli->prepare('SELECT owner_user_id FROM projects WHERE id = ?');
     $ownerStmt->bind_param('i', $projectId);
@@ -249,31 +293,33 @@ function permissions_project_assignee_options_list(mysqli $mysqli, int $projectI
         $memberUserIds[(int)$member['user_id']] = true;
     }
 
-    $stmt = $mysqli->prepare(
-        'SELECT pi.id AS invite_id, pi.email, pi.role, pi.created_at,
-                u.id AS user_id, u.name
+    $inviteStmt = $mysqli->prepare(
+        'SELECT pi.id AS invite_id, pi.email, pi.role, pi.created_at
          FROM project_invites pi
-         INNER JOIN users u ON LOWER(u.email) = LOWER(pi.email)
          WHERE pi.project_id = ? AND pi.accepted_at IS NULL
          ORDER BY pi.email'
     );
-    $stmt->bind_param('i', $projectId);
-    $stmt->execute();
-    $pending = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $inviteStmt->bind_param('i', $projectId);
+    $inviteStmt->execute();
+    $pendingInvites = $inviteStmt->get_result()->fetch_all(MYSQLI_ASSOC);
 
     $assignees = $members;
-    foreach ($pending as $row) {
-        $userId = (int)$row['user_id'];
+    foreach ($pendingInvites as $row) {
+        $userId = permissions_ensure_user_for_invite_email($mysqli, $row['email']);
         if (isset($memberUserIds[$userId])) {
             continue;
         }
+        $userStmt = $mysqli->prepare('SELECT name, email FROM users WHERE id = ?');
+        $userStmt->bind_param('i', $userId);
+        $userStmt->execute();
+        $userRow = $userStmt->get_result()->fetch_assoc() ?: ['name' => '', 'email' => $row['email']];
         $assignees[] = [
             'id' => null,
             'user_id' => $userId,
             'role' => $row['role'],
             'created_at' => $row['created_at'],
             'email' => $row['email'],
-            'name' => $row['name'],
+            'name' => $userRow['name'] ?? '',
             'is_owner' => 0,
             'pending_invite' => 1,
             'invite_id' => (int)$row['invite_id'],

@@ -43,8 +43,12 @@ function sql_project_owner_user_id_expr(string $projectAlias = 'p'): string {
 function sql_project_owner_assignee_name(string $directOwnerAlias = 'ou_direct'): string {
     return "COALESCE(
         NULLIF(TRIM({$directOwnerAlias}.name), ''),
+        NULLIF(TRIM({$directOwnerAlias}.email), ''),
         (
-            SELECT NULLIF(TRIM(u2.name), '')
+            SELECT COALESCE(
+                NULLIF(TRIM(u2.name), ''),
+                NULLIF(TRIM(u2.email), '')
+            )
             FROM project_members pm2
             INNER JOIN users u2 ON u2.id = pm2.user_id
             WHERE pm2.project_id = p.id AND pm2.role = 'admin'

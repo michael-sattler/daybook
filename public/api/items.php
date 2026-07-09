@@ -8,12 +8,28 @@ require_login();
 $method = $_SERVER['REQUEST_METHOD'];
 
 const EDITABLE_FIELDS = [
-    'category_id', 'subsystem_id', 'item_text', 'url', 'priority_id', 'status_id', 'project_id', 'assigned_user_id',
+    'category_id', 'subsystem_id', 'item_text', 'url', 'priority_id', 'status_id', 'project_id', 'assigned_user_id', 'due_date',
 ];
 const FIELD_TYPES = [
     'category_id' => 's', 'subsystem_id' => 's', 'item_text' => 's',
     'url' => 's', 'priority_id' => 's', 'status_id' => 's', 'project_id' => 's', 'assigned_user_id' => 's',
+    'due_date' => 's',
 ];
+
+function normalize_due_date(mixed $value): ?string {
+    if ($value === null || $value === '') {
+        return null;
+    }
+    $value = trim((string)$value);
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+        fail('due_date must be YYYY-MM-DD', 400);
+    }
+    $dt = DateTime::createFromFormat('Y-m-d', $value);
+    if (!$dt || $dt->format('Y-m-d') !== $value) {
+        fail('due_date is not a valid date', 400);
+    }
+    return $value;
+}
 
 const PENDING_STATUS_NAMES = ['TODO', 'UNDERWAY', 'BLOCKED'];
 
@@ -76,6 +92,7 @@ function item_select_sql(): string {
                    i.order_in_priority,
                    i.status_id, s.name AS status_name,
                    s.bg_color AS status_bg_color, s.text_color AS status_text_color,
+                   i.due_date,
                    i.created_at, i.updated_at
             FROM items i
             LEFT JOIN projects p ON p.id = i.project_id
@@ -186,17 +203,18 @@ if ($method === 'POST') {
     $assignment = require_valid_assignment($mysqli, $projectId, $body['assigned_user_id'] ?? null);
     $assignedUserId = $assignment['assigned_user_id'];
     $assignedToProjectOwner = $assignment['assigned_to_project_owner'];
+    $dueDate = array_key_exists('due_date', $body) ? normalize_due_date($body['due_date']) : null;
     $createdBy = current_user_id();
     $now = time();
 
     $stmt = $mysqli->prepare('INSERT INTO items
         (sort_order, project_id, created_by_user_id, assigned_user_id, assigned_to_project_owner,
-         category_id, subsystem_id, item_text, url, priority_id, order_in_priority, status_id, created_at, updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+         category_id, subsystem_id, item_text, url, priority_id, order_in_priority, status_id, due_date, created_at, updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
     $stmt->bind_param(
-        'iiiiiiissiiiii',
+        'iiiiiiissiiisii',
         $sortOrder, $projectId, $createdBy, $assignedUserId, $assignedToProjectOwner, $categoryId, $subsystemId,
-        $itemText, $url, $priorityId, $orderInPriority, $statusId, $now, $now
+        $itemText, $url, $priorityId, $orderInPriority, $statusId, $dueDate, $now, $now
     );
     $stmt->execute();
     respond(fetch_one_item($mysqli, $mysqli->insert_id), 201);
@@ -224,7 +242,11 @@ if ($method === 'PUT') {
         $sets[] = "$field = ?";
         $types .= FIELD_TYPES[$field];
         $value = $body[$field];
-        $params[] = ($value === '' && str_ends_with($field, '_id')) ? null : $value;
+        if ($field === 'due_date') {
+            $params[] = normalize_due_date($value);
+        } else {
+            $params[] = ($value === '' && str_ends_with($field, '_id')) ? null : $value;
+        }
     }
     if (array_key_exists('assigned_user_id', $body)) {
         $item = permissions_fetch_item($mysqli, $id);

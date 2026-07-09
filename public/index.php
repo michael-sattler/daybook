@@ -68,6 +68,7 @@ ob_start();
         <th class="col-project">Project</th>
         <th class="col-priority">Priority</th>
         <th class="col-order">Order</th>
+        <th class="col-due">Due</th>
         <th class="col-status">Status</th>
         <th class="col-assignee">Assignee</th>
         <th class="col-docs">Docs</th>
@@ -157,6 +158,23 @@ ob_start();
     <div class="modal-actions">
       <button id="members-modal-close" class="primary">Done</button>
     </div>
+  </div>
+</div>
+
+<!-- Due date picker modal -->
+<div id="due-date-modal" class="modal-overlay hidden">
+  <div class="modal-box modal-narrow">
+    <h2>Due date</h2>
+    <p class="detail-item-text" id="due-date-item-text"></p>
+    <form id="due-date-form" class="due-date-form">
+      <label for="due-date-input">Date</label>
+      <input type="date" id="due-date-input">
+      <div class="modal-actions">
+        <button type="button" id="due-date-clear" class="link-btn">Clear</button>
+        <button type="button" id="due-date-cancel">Cancel</button>
+        <button type="submit" class="primary">Save</button>
+      </div>
+    </form>
   </div>
 </div>
 

@@ -432,6 +432,7 @@ table#items-table tbody tr:hover { background: #f0f7ff; }
   overflow-y: auto;
 }
 .modal-box.modal-wide { width: 560px; }
+.modal-box.modal-narrow { width: 320px; }
 .modal-box h2 { margin-top: 0; font-size: 16px; }
 .modal-box h3 { font-size: 14px; margin: 14px 0 6px; }
 
@@ -556,6 +557,36 @@ body.login-page {
 .member-row select { width: auto; min-width: 110px; background: #fff; border-color: var(--border); }
 
 .col-assignee select { min-width: 120px; background: #fff; border-color: var(--border); }
+.col-due { width: 72px; text-align: center; white-space: nowrap; }
+.due-date-btn {
+  display: inline-block;
+  min-width: 52px;
+  padding: 2px 4px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.due-date-btn:hover:not(:disabled) {
+  border-color: var(--border);
+  background: #fff;
+  color: var(--text);
+}
+.due-date-btn.has-date { color: var(--text); }
+.due-date-btn:disabled { cursor: default; opacity: 0.7; }
+.due-date-form { display: flex; flex-direction: column; gap: 8px; }
+.due-date-form label { font-size: 12px; color: var(--muted); }
+.due-date-form input[type="date"] {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px;
+  background: #fff;
+  font: inherit;
+}
+.due-date-form .modal-actions { margin-top: 8px; }
 
 .hidden { display: none !important; }
 

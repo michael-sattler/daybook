@@ -102,6 +102,7 @@ CREATE TABLE IF NOT EXISTS items (
   priority_id INT NULL,
   order_in_priority INT NOT NULL DEFAULT 0,
   status_id INT NULL,
+  due_date DATE NULL,
   created_at INT NOT NULL,
   updated_at INT NOT NULL,
   FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,

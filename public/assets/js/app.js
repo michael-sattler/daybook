@@ -320,6 +320,7 @@
         ['subsystem', item.subsystem_name],
         ['assignee', item.assignee_name || item.assignee_email],
         ['status', item.status_name],
+        ['due', formatDueDateDisplay(item.due_date)],
       ]);
       if (tagged) parts.push(tagged);
       return parts.join(' ');
@@ -363,6 +364,53 @@
     return ['admin', 'manager', 'contributor'].includes(caps.role);
   }
 
+  function formatDueDateDisplay(dueDate) {
+    if (!dueDate) return '';
+    const match = String(dueDate).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return '';
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = months[Number(match[2]) - 1];
+    const day = String(Number(match[3]));
+    return month ? `${month}-${day}` : '';
+  }
+
+  function dueDateCellHtml(item, editable) {
+    const label = formatDueDateDisplay(item.due_date);
+    const text = label || '—';
+    const cls = label ? 'due-date-btn has-date' : 'due-date-btn';
+    return `<button type="button" class="${cls}" data-due-date-btn ${editable ? '' : 'disabled'} title="${label ? escapeHtml(label) : 'Set due date'}">${escapeHtml(text)}</button>`;
+  }
+
+  let dueDateModalItemId = null;
+
+  function openDueDateModal(item) {
+    dueDateModalItemId = item.id;
+    document.getElementById('due-date-item-text').textContent = item.item_text || '(untitled item)';
+    document.getElementById('due-date-input').value = item.due_date || '';
+    document.getElementById('due-date-modal').classList.remove('hidden');
+    document.getElementById('due-date-input').focus();
+  }
+
+  function closeDueDateModal() {
+    dueDateModalItemId = null;
+    document.getElementById('due-date-modal').classList.add('hidden');
+  }
+
+  async function saveDueDate(value) {
+    if (!dueDateModalItemId) return;
+    const itemId = dueDateModalItemId;
+    try {
+      const updated = await put('/api/items', { id: itemId, due_date: value || '' });
+      const idx = state.items.findIndex((i) => sameId(i.id, itemId));
+      if (idx !== -1) state.items[idx] = updated;
+      closeDueDateModal();
+      renderItems();
+      toast('Saved');
+    } catch (e) {
+      toast(e.message, true);
+    }
+  }
+
   function canDeleteItem(item) {
     const caps = state.caps || {};
     if (caps.is_daybookstaff) return true;
@@ -398,23 +446,25 @@
   }
 
   function projectOwnerAssigneeLabel(projectId, item) {
+    const owner = projectOwnerMember(projectId);
+    if (owner) {
+      const ownerLabel = memberDisplayName(owner);
+      if (ownerLabel) return ownerLabel;
+    }
     const fromItem = String(item?.project_owner_assignee_label ?? '').trim();
     if (fromItem && fromItem !== 'Project Owner') return fromItem;
     const project = findProject(projectId);
     const fromProject = String(project?.project_owner_assignee_label ?? project?.owner_name ?? '').trim();
-    if (fromProject) return fromProject;
+    if (fromProject && fromProject !== 'Project Owner') return fromProject;
     if (sameId(projectId, state.currentProjectId)) {
       const capsLabel = String(state.caps?.project_owner_assignee_label ?? state.caps?.owner_name ?? '').trim();
-      if (capsLabel) return capsLabel;
+      if (capsLabel && capsLabel !== 'Project Owner') return capsLabel;
     }
     const byFlag = assigneeMemberList().find((m) => sameId(projectId, state.currentProjectId) && Number(m.is_owner) === 1);
     if (byFlag) {
-      const flaggedName = String(byFlag.name ?? '').trim();
-      if (flaggedName) return flaggedName;
+      const flaggedLabel = memberDisplayName(byFlag);
+      if (flaggedLabel) return flaggedLabel;
     }
-    const owner = projectOwnerMember(projectId);
-    const memberName = String(owner?.name ?? '').trim();
-    if (memberName) return memberName;
     return 'Project Owner';
   }
 
@@ -717,6 +767,7 @@
       <td class="col-project"><select data-field="project_id" ${fieldsEditable && caps.is_owner ? '' : 'disabled'}>${optionsHtml(state.projects, item.project_id, '')}</select></td>
       <td class="col-priority"><select data-field="priority_id" ${fieldsEditable ? '' : 'disabled'}>${optionsHtml(state.priorities, item.priority_id)}</select></td>
       <td class="col-order">${state.orderBy === 'priority' && item.priority_id && reorderable ? '<span class="drag-handle" title="Drag to reorder">⠿</span> ' : ''}${item.order_in_priority || ''}</td>
+      <td class="col-due">${dueDateCellHtml(item, fieldsEditable)}</td>
       <td class="col-status"><select data-field="status_id" ${statusEditable ? '' : 'disabled'}>${optionsHtml(state.statuses, item.status_id)}</select></td>
       <td class="col-assignee"><select data-field="assigned_user_id" ${assignEditable ? '' : 'disabled'}>${memberOptionsHtml(item)}</select></td>
       <td class="col-docs"><button class="link-btn detail-btn" data-tab="docs">Docs</button></td>
@@ -852,6 +903,11 @@
 
     tr.querySelectorAll('.detail-btn').forEach((btn) => {
       btn.addEventListener('click', () => openDetailModal(item));
+    });
+
+    tr.querySelector('[data-due-date-btn]')?.addEventListener('click', () => {
+      if (!canEditItemFields(item)) return;
+      openDueDateModal(item);
     });
   }
 
@@ -995,6 +1051,15 @@
     document.getElementById('members-modal-close').addEventListener('click', closeMembersModal);
     document.getElementById('invite-form').addEventListener('submit', submitInvite);
     document.getElementById('copy-invite-link').addEventListener('click', copyInviteLink);
+
+    document.getElementById('due-date-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      await saveDueDate(document.getElementById('due-date-input').value);
+    });
+    document.getElementById('due-date-clear').addEventListener('click', async () => {
+      await saveDueDate('');
+    });
+    document.getElementById('due-date-cancel').addEventListener('click', closeDueDateModal);
 
     document.getElementById('option-modal-close').addEventListener('click', closeOptionModal);
     document.getElementById('option-modal-sync-palette').addEventListener('click', async () => {

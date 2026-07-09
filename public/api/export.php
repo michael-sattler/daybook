@@ -23,7 +23,7 @@ if ($vis !== '1=1') {
 $sql = "SELECT i.sort_order, i.item_text, c.name AS category, sub.name AS subsystem,
                i.url, pr.name AS priority,
                " . sql_item_assignee_name() . " AS assignee,
-               s.name AS status
+               s.name AS status, i.due_date
         FROM items i
         LEFT JOIN projects p ON p.id = i.project_id
         LEFT JOIN categories c ON c.id = i.category_id
@@ -49,7 +49,7 @@ header('Content-Type: text/csv; charset=utf-8');
 header('Content-Disposition: attachment; filename="daybook-' . $slug . '.csv"');
 
 $out = fopen('php://output', 'w');
-fputcsv($out, ['#', 'Item', 'Category', 'Subsystem', 'URL', 'Priority', 'Status', 'Assignee']);
+fputcsv($out, ['#', 'Item', 'Category', 'Subsystem', 'URL', 'Priority', 'Status', 'Assignee', 'Due Date']);
 foreach ($rows as $row) {
     fputcsv($out, [
         $row['sort_order'],
@@ -60,6 +60,7 @@ foreach ($rows as $row) {
         $row['priority'] ?? '',
         $row['status'] ?? '',
         $row['assignee'] ?? '',
+        $row['due_date'] ?? '',
     ]);
 }
 fclose($out);
