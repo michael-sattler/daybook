@@ -20,17 +20,39 @@ ob_start();
 </div>
 
 <div class="filterbar">
-  <input type="text" id="filter-q" placeholder="Search item / subsystem / URL...">
-  <select id="filter-category"><option value="">All Categories</option></select>
-  <select id="filter-priority"><option value="">All Priorities</option></select>
-  <select id="filter-status"><option value="">All Statuses</option></select>
-  <button id="export-btn" class="link-btn" type="button">Export CSV</button>
-  <button id="manage-categories-btn" class="link-btn">Edit Categories</button>
-  <button id="manage-subsystems-btn" class="link-btn">Edit Subsystems</button>
-  <button id="manage-priorities-btn" class="link-btn">Edit Priorities</button>
-  <button id="manage-statuses-btn" class="link-btn">Edit Statuses</button>
-  <button id="clear-filters-btn" class="link-btn">Clear Filters</button>
-  <button id="sort-priority-btn">Sort by Priority &gt; Order</button>
+  <div class="filterbar-filters">
+    <input type="text" id="filter-q" placeholder="Search item / subsystem / URL...">
+    <select id="filter-category"><option value="">All Categories</option></select>
+    <select id="filter-priority"><option value="">All Priorities</option></select>
+    <select id="filter-status"><option value="">All Statuses</option></select>
+    <button id="clear-filters-btn" class="link-btn" type="button">Clear Filters</button>
+  </div>
+  <div class="filterbar-toggles">
+    <label class="filter-toggle">
+      <input type="checkbox" id="priority-sort-toggle">
+      <span class="filter-toggle-track" aria-hidden="true"></span>
+      <span class="filter-toggle-label">Priority Sort</span>
+    </label>
+    <label class="filter-toggle">
+      <input type="checkbox" id="show-completed-toggle" checked>
+      <span class="filter-toggle-track" aria-hidden="true"></span>
+      <span class="filter-toggle-label">Show completed</span>
+    </label>
+  </div>
+  <div class="filterbar-actions">
+    <button id="export-btn" class="link-btn" type="button">Export CSV</button>
+    <div class="filterbar-config" id="filterbar-config">
+      <button type="button" id="filter-config-toggle" class="config-pill" aria-expanded="false" aria-haspopup="menu">
+        CONFIG <span class="config-pill-chevron" aria-hidden="true">▾</span>
+      </button>
+      <ul id="filter-config-menu" class="filter-config-menu hidden" role="menu">
+        <li role="none"><button type="button" id="manage-categories-btn" class="filter-config-option" role="menuitem">Categories</button></li>
+        <li role="none"><button type="button" id="manage-subsystems-btn" class="filter-config-option" role="menuitem">Subsystems</button></li>
+        <li role="none"><button type="button" id="manage-priorities-btn" class="filter-config-option" role="menuitem">Priorities</button></li>
+        <li role="none"><button type="button" id="manage-statuses-btn" class="filter-config-option" role="menuitem">Statuses</button></li>
+      </ul>
+    </div>
+  </div>
 </div>
 
 <div class="grid-wrap">

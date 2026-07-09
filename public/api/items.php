@@ -84,6 +84,9 @@ if ($method === 'GET') {
             $types .= 'i';
             $params[] = (int)$_GET['status_id'];
         }
+    } elseif (!empty($_GET['active_only'])) {
+        $pending = "'" . implode("','", PENDING_STATUS_NAMES) . "'";
+        $where[] = "(i.status_id IS NULL OR s.name IN ($pending))";
     }
     if (!empty($_GET['q'])) {
         $where[] = "(i.item_text LIKE ? OR sub.name LIKE ? OR i.url LIKE ?)";

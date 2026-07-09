@@ -31,6 +31,7 @@
     projectMembers: [],
     currentProjectId: null,
     orderBy: 'sort_order', // or 'priority'
+    showCompleted: true,
     filters: { q: '', category_id: '', priority_id: '', status_id: '' },
     detailItemId: null,
     me: null,
@@ -140,6 +141,7 @@
     await loadProjectMembers();
     await loadItems();
     applyPermissionUI();
+    syncFilterbarToggles();
     bindGlobalEvents();
   }
 
@@ -296,6 +298,7 @@
     if (state.filters.category_id) params.set('category_id', state.filters.category_id);
     if (state.filters.priority_id) params.set('priority_id', state.filters.priority_id);
     if (state.filters.status_id) params.set('status_id', state.filters.status_id);
+    if (!state.showCompleted) params.set('active_only', '1');
     state.items = await get('/api/items?' + params.toString());
     renderItems();
   }
@@ -379,6 +382,35 @@
     const toggle = document.getElementById('user-menu-toggle');
     if (menu) menu.classList.add('hidden');
     if (toggle) toggle.setAttribute('aria-expanded', 'false');
+  }
+
+  function closeFilterConfigMenu() {
+    const menu = document.getElementById('filter-config-menu');
+    const toggle = document.getElementById('filter-config-toggle');
+    if (menu) menu.classList.add('hidden');
+    if (toggle) toggle.setAttribute('aria-expanded', 'false');
+  }
+
+  function toggleFilterConfigMenu() {
+    const menu = document.getElementById('filter-config-menu');
+    const toggle = document.getElementById('filter-config-toggle');
+    if (!menu || !toggle) return;
+    const opening = menu.classList.contains('hidden');
+    if (opening) {
+      closeProjectStripMenu();
+      closeUserMenu();
+      menu.classList.remove('hidden');
+      toggle.setAttribute('aria-expanded', 'true');
+    } else {
+      closeFilterConfigMenu();
+    }
+  }
+
+  function syncFilterbarToggles() {
+    const priorityToggle = document.getElementById('priority-sort-toggle');
+    if (priorityToggle) priorityToggle.checked = state.orderBy === 'priority';
+    const completedToggle = document.getElementById('show-completed-toggle');
+    if (completedToggle) completedToggle.checked = state.showCompleted;
   }
 
   function toggleUserMenu() {
@@ -611,6 +643,7 @@
     document.addEventListener('click', (e) => {
       if (!e.target.closest('#project-strip')) closeProjectStripMenu();
       if (!e.target.closest('#user-menu')) closeUserMenu();
+      if (!e.target.closest('#filterbar-config')) closeFilterConfigMenu();
     });
 
     const userMenuToggle = document.getElementById('user-menu-toggle');
@@ -636,10 +669,19 @@
       await switchProject(project.id);
     });
 
-    document.getElementById('sort-priority-btn').addEventListener('click', async () => {
-      state.orderBy = state.orderBy === 'priority' ? 'sort_order' : 'priority';
-      document.getElementById('sort-priority-btn').classList.toggle('active', state.orderBy === 'priority');
+    document.getElementById('priority-sort-toggle').addEventListener('change', async (e) => {
+      state.orderBy = e.target.checked ? 'priority' : 'sort_order';
       await loadItems();
+    });
+
+    document.getElementById('show-completed-toggle').addEventListener('change', async (e) => {
+      state.showCompleted = e.target.checked;
+      await loadItems();
+    });
+
+    document.getElementById('filter-config-toggle').addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleFilterConfigMenu();
     });
 
     document.getElementById('add-item-btn').addEventListener('click', async () => {
@@ -678,10 +720,22 @@
       loadItems();
     });
 
-    document.getElementById('manage-categories-btn').addEventListener('click', () => openOptionModal('categories'));
-    document.getElementById('manage-subsystems-btn').addEventListener('click', () => openOptionModal('subsystems'));
-    document.getElementById('manage-priorities-btn').addEventListener('click', () => openOptionModal('priorities'));
-    document.getElementById('manage-statuses-btn').addEventListener('click', () => openOptionModal('statuses'));
+    document.getElementById('manage-categories-btn').addEventListener('click', () => {
+      closeFilterConfigMenu();
+      openOptionModal('categories');
+    });
+    document.getElementById('manage-subsystems-btn').addEventListener('click', () => {
+      closeFilterConfigMenu();
+      openOptionModal('subsystems');
+    });
+    document.getElementById('manage-priorities-btn').addEventListener('click', () => {
+      closeFilterConfigMenu();
+      openOptionModal('priorities');
+    });
+    document.getElementById('manage-statuses-btn').addEventListener('click', () => {
+      closeFilterConfigMenu();
+      openOptionModal('statuses');
+    });
     document.getElementById('manage-projects-btn').addEventListener('click', () => openOptionModal('projects'));
     document.getElementById('manage-members-btn').addEventListener('click', openMembersModal);
     document.getElementById('export-btn').addEventListener('click', () => {
