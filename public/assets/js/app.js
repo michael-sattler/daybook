@@ -189,8 +189,11 @@
     }
     try {
       const assignees = await get(`/api/assignees?project_id=${state.currentProjectId}`);
-      if (Array.isArray(assignees)) {
+      if (Array.isArray(assignees) && assignees.length) {
         state.projectAssignees = assignees;
+        if (state.items.length) renderItems();
+      } else if (state.projectMembers.length) {
+        state.projectAssignees = state.projectMembers.slice();
         if (state.items.length) renderItems();
       }
     } catch {
@@ -384,7 +387,7 @@
 
   function projectOwnerAssigneeLabel(projectId, item) {
     const fromItem = String(item?.project_owner_assignee_label ?? '').trim();
-    if (fromItem) return fromItem;
+    if (fromItem && fromItem !== 'Project Owner') return fromItem;
     const project = findProject(projectId);
     const fromProject = String(project?.project_owner_assignee_label ?? project?.owner_name ?? '').trim();
     if (fromProject) return fromProject;

@@ -165,5 +165,5 @@ ob_start();
 $content = ob_get_clean();
 $initialProjectSlug = htmlspecialchars($_GET['project_slug'] ?? '', ENT_QUOTES);
 $pageScripts = "<script>window.INITIAL_PROJECT_SLUG = \"{$initialProjectSlug}\";</script>"
-    . '<script src="/assets/js/app.js"></script>';
+    . '<script src="/assets/js/app.js?v=' . filemtime(__DIR__ . '/assets/js/app.js') . '"></script>';
 include __DIR__ . '/elements/layout.php';

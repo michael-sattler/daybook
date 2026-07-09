@@ -50,7 +50,121 @@ function permissions_project_owner_assignee_label(mysqli $mysqli, int $projectId
     return $name !== '' ? $name : 'Project Owner';
 }
 
+/** Add project_members rows for accepted invites that never got membership. */
+function permissions_repair_accepted_invite_members(mysqli $mysqli, int $projectId): void {
+    $stmt = $mysqli->prepare(
+        'SELECT pi.email, pi.role, COALESCE(pi.accepted_at, pi.created_at) AS joined_at
+         FROM project_invites pi
+         WHERE pi.project_id = ? AND pi.accepted_at IS NOT NULL'
+    );
+    $stmt->bind_param('i', $projectId);
+    $stmt->execute();
+    $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+
+    $insert = $mysqli->prepare(
+        'INSERT IGNORE INTO project_members (project_id, user_id, role, created_at) VALUES (?,?,?,?)'
+    );
+    foreach ($rows as $row) {
+        $userId = permissions_ensure_user_for_invite_email($mysqli, $row['email']);
+        $role = $row['role'];
+        $joinedAt = (int)$row['joined_at'];
+        $insert->bind_param('iisi', $projectId, $userId, $role, $joinedAt);
+        $insert->execute();
+    }
+}
+
+/** Ensure stored owner and at least one admin member exist for assignee/owner resolution. */
+function permissions_repair_project_membership(mysqli $mysqli, int $projectId): void {
+    permissions_repair_accepted_invite_members($mysqli, $projectId);
+
+    $ownerStmt = $mysqli->prepare('SELECT owner_user_id FROM projects WHERE id = ?');
+    $ownerStmt->bind_param('i', $projectId);
+    $ownerStmt->execute();
+    $project = $ownerStmt->get_result()->fetch_assoc();
+    if (!$project) {
+        return;
+    }
+
+    $ownerUserId = $project['owner_user_id'] ? (int)$project['owner_user_id'] : null;
+    if ($ownerUserId) {
+        $check = $mysqli->prepare(
+            'SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ? LIMIT 1'
+        );
+        $check->bind_param('ii', $projectId, $ownerUserId);
+        $check->execute();
+        if (!$check->get_result()->fetch_row()) {
+            $now = time();
+            $role = 'admin';
+            $ins = $mysqli->prepare(
+                'INSERT IGNORE INTO project_members (project_id, user_id, role, created_at) VALUES (?,?,?,?)'
+            );
+            $ins->bind_param('iisi', $projectId, $ownerUserId, $role, $now);
+            $ins->execute();
+        }
+    }
+
+    $countStmt = $mysqli->prepare('SELECT COUNT(*) FROM project_members WHERE project_id = ?');
+    $countStmt->bind_param('i', $projectId);
+    $countStmt->execute();
+    if ((int)$countStmt->get_result()->fetch_row()[0] > 0) {
+        return;
+    }
+
+    $candidateId = null;
+    $itemStmt = $mysqli->prepare(
+        'SELECT created_by_user_id FROM items
+         WHERE project_id = ? AND created_by_user_id IS NOT NULL
+         ORDER BY created_at, id LIMIT 1'
+    );
+    $itemStmt->bind_param('i', $projectId);
+    $itemStmt->execute();
+    $itemRow = $itemStmt->get_result()->fetch_assoc();
+    if ($itemRow) {
+        $candidateId = (int)$itemRow['created_by_user_id'];
+    }
+
+    if (!$candidateId) {
+        $inviteStmt = $mysqli->prepare(
+            'SELECT invited_by_user_id FROM project_invites
+             WHERE project_id = ?
+             ORDER BY created_at, id LIMIT 1'
+        );
+        $inviteStmt->bind_param('i', $projectId);
+        $inviteStmt->execute();
+        $inviteRow = $inviteStmt->get_result()->fetch_assoc();
+        if ($inviteRow) {
+            $candidateId = (int)$inviteRow['invited_by_user_id'];
+        }
+    }
+
+    if (!$candidateId) {
+        $uid = current_user_id();
+        if ($uid && is_daybookstaff()) {
+            $candidateId = $uid;
+        }
+    }
+
+    if (!$candidateId) {
+        return;
+    }
+
+    $now = time();
+    $role = 'admin';
+    $ins = $mysqli->prepare(
+        'INSERT IGNORE INTO project_members (project_id, user_id, role, created_at) VALUES (?,?,?,?)'
+    );
+    $ins->bind_param('iisi', $projectId, $candidateId, $role, $now);
+    $ins->execute();
+
+    if (!$ownerUserId) {
+        $upd = $mysqli->prepare('UPDATE projects SET owner_user_id = ? WHERE id = ? AND owner_user_id IS NULL');
+        $upd->bind_param('ii', $candidateId, $projectId);
+        $upd->execute();
+    }
+}
+
 function permissions_project_members_list(mysqli $mysqli, int $projectId): array {
+    permissions_repair_project_membership($mysqli, $projectId);
     $ownerExpr = sql_project_owner_user_id_expr('p');
     $stmt = $mysqli->prepare(
         "SELECT pm.id, pm.user_id, pm.role, pm.created_at, u.email, u.name,
@@ -126,6 +240,7 @@ function permissions_ensure_user_for_invite_email(mysqli $mysqli, string $email)
 
 /** Members plus pending invitees (for assignee dropdown). */
 function permissions_project_assignee_options_list(mysqli $mysqli, int $projectId): array {
+    permissions_repair_project_membership($mysqli, $projectId);
     permissions_sync_pending_invite_users($mysqli, $projectId);
     $members = permissions_project_members_list($mysqli, $projectId);
     $memberUserIds = [];
