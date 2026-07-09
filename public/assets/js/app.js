@@ -189,6 +189,60 @@
     setVisible('manage-statuses-btn', !!state.me?.is_daybookstaff);
     setVisible('manage-members-btn', !!caps.can_manage_members);
     setVisible('export-btn', !!caps.can_export);
+    setVisible('export-tasklist-btn', !!caps.can_export);
+  }
+
+  const COMPLETED_STATUS_NAMES = new Set(['OK', 'N/A']);
+
+  function taskListExportField(value) {
+    return String(value ?? '').replace(/\s+/g, ' ').trim();
+  }
+
+  function formatTaskListExportDate(date) {
+    return date.toLocaleString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  }
+
+  function itemsForTaskListExport() {
+    if (state.showCompleted) return state.items;
+    return state.items.filter((item) => {
+      const status = taskListExportField(item.status_name);
+      return !status || !COMPLETED_STATUS_NAMES.has(status);
+    });
+  }
+
+  function buildTaskListExportText() {
+    const project = findProject(state.currentProjectId);
+    const projectName = taskListExportField(project?.name) || 'Project';
+    const header = `${projectName} | Task List | ${formatTaskListExportDate(new Date())}`;
+    const rows = itemsForTaskListExport().map((item, index) => {
+      const cols = [
+        index + 1,
+        taskListExportField(item.item_text),
+        taskListExportField(item.priority_name),
+        taskListExportField(item.category_name),
+        taskListExportField(item.subsystem_name),
+        taskListExportField(item.assignee_name || item.assignee_email),
+        taskListExportField(item.status_name),
+      ];
+      return cols.join(' | ');
+    });
+    return [header, ...rows].join('\n');
+  }
+
+  async function copyTaskListExport() {
+    const text = buildTaskListExportText();
+    try {
+      await navigator.clipboard.writeText(text);
+      toast('Task list copied to clipboard');
+    } catch (e) {
+      toast('Could not copy to clipboard', true);
+    }
   }
 
   function canEditItemFields(item) {
@@ -496,7 +550,12 @@
       <td class="col-category"><select data-field="category_id" ${fieldsEditable ? '' : 'disabled'}>${optionsHtml(state.categories, item.category_id)}</select></td>
       <td class="col-subsystem"><select data-field="subsystem_id" ${fieldsEditable ? '' : 'disabled'}>${optionsHtml(state.subsystems, item.subsystem_id)}</select></td>
       <td class="col-item"><textarea data-field="item_text" rows="1" ${fieldsEditable ? '' : 'disabled'}>${escapeHtml(item.item_text)}</textarea></td>
-      <td class="col-url"><input type="text" data-field="url" value="${escapeHtml(item.url)}" ${fieldsEditable ? '' : 'disabled'}></td>
+      <td class="col-url">
+        <div class="url-cell">
+          <input type="text" data-field="url" value="${escapeHtml(item.url)}" ${fieldsEditable ? '' : 'disabled'}>
+          <button type="button" class="icon-btn url-open-btn hidden" title="Open URL" aria-label="Open URL">↗</button>
+        </div>
+      </td>
       <td class="col-project"><select data-field="project_id" ${fieldsEditable && caps.is_owner ? '' : 'disabled'}>${optionsHtml(state.projects, item.project_id, '')}</select></td>
       <td class="col-priority"><select data-field="priority_id" ${fieldsEditable ? '' : 'disabled'}>${optionsHtml(state.priorities, item.priority_id)}</select></td>
       <td class="col-order">${state.orderBy === 'priority' && item.priority_id && reorderable ? '<span class="drag-handle" title="Drag to reorder">⠿</span> ' : ''}${item.order_in_priority || ''}</td>
@@ -508,6 +567,7 @@
     `;
 
     bindRowEvents(tr, item);
+    bindUrlCell(tr, item);
     autoResizeTextarea(tr.querySelector('textarea[data-field="item_text"]'));
 
     for (const [field, cfg] of Object.entries(FIELD_COLOR_CONFIG)) {
@@ -571,6 +631,35 @@
     const resize = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
     ta.addEventListener('input', resize);
     resize();
+  }
+
+  function normalizeExternalUrl(url) {
+    const trimmed = String(url ?? '').trim();
+    if (!trimmed) return '';
+    return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  }
+
+  function syncUrlOpenBtn(urlInput) {
+    const btn = urlInput?.closest('.url-cell')?.querySelector('.url-open-btn');
+    if (!btn) return;
+    btn.classList.toggle('hidden', !String(urlInput.value ?? '').trim());
+  }
+
+  function bindUrlCell(tr, item) {
+    const urlInput = tr.querySelector('input[data-field="url"]');
+    if (!urlInput) return;
+
+    syncUrlOpenBtn(urlInput);
+    urlInput.addEventListener('input', () => syncUrlOpenBtn(urlInput));
+
+    tr.querySelector('.url-open-btn')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      const href = normalizeExternalUrl(urlInput.value);
+      if (!href) return;
+      const projectSelect = tr.querySelector('select[data-field="project_id"]');
+      const project = findProject(projectSelect?.value || item.project_id || state.currentProjectId);
+      window.open(href, projectSlug(project) || 'daybook');
+    });
   }
 
   function bindRowEvents(tr, item) {
@@ -736,11 +825,14 @@
       closeFilterConfigMenu();
       openOptionModal('statuses');
     });
-    document.getElementById('manage-projects-btn').addEventListener('click', () => openOptionModal('projects'));
-    document.getElementById('manage-members-btn').addEventListener('click', openMembersModal);
+    document.getElementById('manage-members-btn').addEventListener('click', () => {
+      closeFilterConfigMenu();
+      openMembersModal();
+    });
     document.getElementById('export-btn').addEventListener('click', () => {
       window.location.href = `/api/export?project_id=${state.currentProjectId}`;
     });
+    document.getElementById('export-tasklist-btn').addEventListener('click', copyTaskListExport);
 
     document.getElementById('members-modal-close').addEventListener('click', closeMembersModal);
     document.getElementById('invite-form').addEventListener('submit', submitInvite);

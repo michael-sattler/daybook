@@ -13,10 +13,6 @@ ob_start();
     </button>
     <ul id="project-strip-menu" class="project-strip-menu hidden" role="listbox"></ul>
   </div>
-  <div class="project-strip-actions">
-    <button type="button" id="manage-members-btn" class="icon-btn project-strip-manage-btn hidden" title="Project members" aria-label="Project members">👥</button>
-    <button type="button" id="manage-projects-btn" class="icon-btn project-strip-manage-btn" title="Manage projects" aria-label="Manage projects">⚙</button>
-  </div>
 </div>
 
 <div class="filterbar">
@@ -40,12 +36,14 @@ ob_start();
     </label>
   </div>
   <div class="filterbar-actions">
-    <button id="export-btn" class="link-btn" type="button">Export CSV</button>
+    <button id="export-btn" class="link-btn" type="button"><i class="fa-solid fa-file-csv"></i> Export CSV</button>
+    <button id="export-tasklist-btn" class="link-btn" type="button"><i class="fa-solid fa-clipboard"></i> Copy Task List</button>
     <div class="filterbar-config" id="filterbar-config">
       <button type="button" id="filter-config-toggle" class="config-pill" aria-expanded="false" aria-haspopup="menu">
-        CONFIG <span class="config-pill-chevron" aria-hidden="true">▾</span>
+        Project Settings <span class="config-pill-chevron" aria-hidden="true">▾</span>
       </button>
       <ul id="filter-config-menu" class="filter-config-menu hidden" role="menu">
+        <li role="none"><button type="button" id="manage-members-btn" class="filter-config-option hidden" role="menuitem">Members</button></li>
         <li role="none"><button type="button" id="manage-categories-btn" class="filter-config-option" role="menuitem">Categories</button></li>
         <li role="none"><button type="button" id="manage-subsystems-btn" class="filter-config-option" role="menuitem">Subsystems</button></li>
         <li role="none"><button type="button" id="manage-priorities-btn" class="filter-config-option" role="menuitem">Priorities</button></li>

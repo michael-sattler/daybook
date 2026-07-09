@@ -126,7 +126,7 @@ textarea { resize: none; overflow: hidden; min-height: 28px; line-height: 1.3; }
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 0 72px;
+  padding: 0 16px;
   border-bottom: 1px solid var(--border);
 }
 .project-strip-control {
@@ -197,28 +197,6 @@ textarea { resize: none; overflow: hidden; min-height: 28px; line-height: 1.3; }
   border-radius: 50%;
   flex-shrink: 0;
   border: 1px solid rgba(0, 0, 0, 0.12);
-}
-.project-strip-actions {
-  position: absolute;
-  right: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-.project-strip-manage-btn {
-  position: static;
-  transform: none;
-  color: inherit;
-  opacity: 0.8;
-  font-size: 15px;
-  padding: 4px 6px;
-  flex-shrink: 0;
-}
-.project-strip-manage-btn:hover {
-  opacity: 1;
-  color: inherit;
 }
 
 .filterbar {
@@ -297,9 +275,10 @@ textarea { resize: none; overflow: hidden; min-height: 28px; line-height: 1.3; }
   border: 1px solid var(--border);
   background: #eef0f3;
   font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   color: var(--muted);
+  white-space: nowrap;
 }
 .config-pill:hover { filter: brightness(0.97); }
 .config-pill-chevron { font-size: 10px; opacity: 0.75; }
@@ -372,6 +351,10 @@ table#items-table tbody tr:hover { background: #f0f7ff; }
 .col-subsystem { width: 120px; }
 .col-item { min-width: 260px; }
 .col-url { width: 160px; }
+.url-cell { display: flex; align-items: center; gap: 2px; }
+.url-cell input[data-field="url"] { flex: 1; min-width: 0; }
+.url-open-btn { flex-shrink: 0; padding: 2px 4px; font-size: 14px; line-height: 1; }
+.url-open-btn:hover { color: var(--accent); }
 .col-project { width: 110px; }
 .col-order { width: 70px; text-align: center; white-space: nowrap; }
 .col-docs, .col-notes { width: 70px; }
