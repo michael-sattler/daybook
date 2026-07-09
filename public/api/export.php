@@ -31,7 +31,7 @@ $sql = "SELECT i.sort_order, i.item_text, c.name AS category, sub.name AS subsys
         LEFT JOIN priorities pr ON pr.id = i.priority_id
         LEFT JOIN statuses s ON s.id = i.status_id
         LEFT JOIN users u ON u.id = i.assigned_user_id
-        LEFT JOIN users ou ON ou.id = p.owner_user_id
+        LEFT JOIN users ou ON ou.id = " . sql_project_owner_user_id_expr('p') . "
         WHERE " . implode(' AND ', $where) . '
         ORDER BY i.sort_order';
 

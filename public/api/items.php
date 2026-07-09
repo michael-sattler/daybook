@@ -46,9 +46,10 @@ function require_valid_assignment(mysqli $mysqli, int $projectId, mixed $value):
 }
 
 function item_select_sql(): string {
+    $ownerExpr = sql_project_owner_user_id_expr('p');
     return "SELECT i.id, i.sort_order, i.project_id, p.name AS project_name,
                    p.bg_color AS project_bg_color, p.text_color AS project_text_color,
-                   p.owner_user_id AS project_owner_user_id,
+                   {$ownerExpr} AS project_owner_user_id,
                    i.created_by_user_id, i.assigned_user_id, i.assigned_to_project_owner,
                    " . sql_item_assignee_name() . " AS assignee_name,
                    CASE WHEN i.assigned_to_project_owner = 1 THEN ou.email
@@ -67,7 +68,7 @@ function item_select_sql(): string {
             FROM items i
             LEFT JOIN projects p ON p.id = i.project_id
             LEFT JOIN users u ON u.id = i.assigned_user_id
-            LEFT JOIN users ou ON ou.id = p.owner_user_id
+            LEFT JOIN users ou ON ou.id = {$ownerExpr}
             LEFT JOIN categories c ON c.id = i.category_id
             LEFT JOIN subsystems sub ON sub.id = i.subsystem_id
             LEFT JOIN priorities pr ON pr.id = i.priority_id

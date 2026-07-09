@@ -2,6 +2,8 @@
 // Permission checks for the user layer (docs/scope-userlayer.md).
 // Requires config.php (session + $mysqli).
 
+require_once __DIR__ . '/functions-universal.php';
+
 const PROJECT_ROLES = ['admin', 'manager', 'contributor', 'viewer'];
 const INVITE_ROLES = ['admin', 'manager', 'contributor', 'viewer'];
 
@@ -22,7 +24,8 @@ function permissions_member_role(mysqli $mysqli, int $projectId, int $userId): ?
 }
 
 function permissions_project_owner_id(mysqli $mysqli, int $projectId): ?int {
-    $stmt = $mysqli->prepare('SELECT owner_user_id FROM projects WHERE id = ?');
+    $expr = sql_project_owner_user_id_expr('p');
+    $stmt = $mysqli->prepare("SELECT {$expr} AS owner_user_id FROM projects p WHERE p.id = ?");
     $stmt->bind_param('i', $projectId);
     $stmt->execute();
     $row = $stmt->get_result()->fetch_assoc();
@@ -43,12 +46,13 @@ function permissions_item_effective_assignee_id(array $item): ?int {
 }
 
 function permissions_has_assignment_in_project(mysqli $mysqli, int $projectId, int $userId): bool {
+    $ownerExpr = sql_project_owner_user_id_expr('p');
     $stmt = $mysqli->prepare(
-        'SELECT 1 FROM items i
+        "SELECT 1 FROM items i
          INNER JOIN projects p ON p.id = i.project_id
          WHERE i.project_id = ?
-           AND (i.assigned_user_id = ? OR (i.assigned_to_project_owner = 1 AND p.owner_user_id = ?))
-         LIMIT 1'
+           AND (i.assigned_user_id = ? OR (i.assigned_to_project_owner = 1 AND {$ownerExpr} = ?))
+         LIMIT 1"
     );
     $stmt->bind_param('iii', $projectId, $userId, $userId);
     $stmt->execute();
@@ -56,11 +60,12 @@ function permissions_has_assignment_in_project(mysqli $mysqli, int $projectId, i
 }
 
 function permissions_fetch_item(mysqli $mysqli, int $itemId): ?array {
+    $ownerExpr = sql_project_owner_user_id_expr('p');
     $stmt = $mysqli->prepare(
-        'SELECT i.*, p.owner_user_id AS project_owner_user_id
+        "SELECT i.*, {$ownerExpr} AS project_owner_user_id
          FROM items i
          JOIN projects p ON p.id = i.project_id
-         WHERE i.id = ?'
+         WHERE i.id = ?"
     );
     $stmt->bind_param('i', $itemId);
     $stmt->execute();
@@ -333,6 +338,7 @@ function permissions_project_caps(mysqli $mysqli, int $projectId): array {
         'role' => $role,
         'is_daybookstaff' => is_daybookstaff(),
         'is_owner' => $isOwner,
+        'owner_user_id' => permissions_project_owner_id($mysqli, $projectId),
         'can_edit_project' => permissions_can_edit_project($mysqli, $projectId),
         'can_delete_project' => permissions_can_delete_project($mysqli, $projectId),
         'can_manage_members' => permissions_can_manage_members($mysqli, $projectId),

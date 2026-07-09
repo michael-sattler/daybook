@@ -233,15 +233,20 @@
     const project = findProject(state.currentProjectId);
     const projectName = taskListExportField(project?.name) || 'Project';
     const header = `${projectName}: Task List | ${formatTaskListExportDate(new Date())}`;
-    const rows = itemsForTaskListExport().map((item, index) => taskListTaggedLine([
-      ['#', index + 1],
-      ['item', item.item_text],
-      ['priority', item.priority_name],
-      ['category', item.category_name],
-      ['subsystem', item.subsystem_name],
-      ['assignee', item.assignee_name || item.assignee_email],
-      ['status', item.status_name],
-    ]));
+    const rows = itemsForTaskListExport().map((item, index) => {
+      const parts = [String(index + 1)];
+      const itemText = taskListExportField(item.item_text);
+      if (itemText) parts.push(itemText);
+      const tagged = taskListTaggedLine([
+        ['priority', item.priority_name],
+        ['category', item.category_name],
+        ['subsystem', item.subsystem_name],
+        ['assignee', item.assignee_name || item.assignee_email],
+        ['status', item.status_name],
+      ]);
+      if (tagged) parts.push(tagged);
+      return parts.join(' ');
+    });
     return [header, ...rows].join('\n');
   }
 
@@ -285,10 +290,26 @@
     return name || member.email || '';
   }
 
-  function projectOwnerMember(projectId) {
+  function resolvedProjectOwnerUserId(projectId) {
     const project = findProject(projectId);
-    if (!project) return null;
-    return state.projectMembers.find((m) => m.is_owner || sameId(m.user_id, project.owner_user_id)) || null;
+    if (project?.owner_user_id) return Number(project.owner_user_id);
+    if (sameId(projectId, state.currentProjectId) && state.caps?.owner_user_id) {
+      return Number(state.caps.owner_user_id);
+    }
+    const item = state.items.find((i) => sameId(i.project_id, projectId) && i.project_owner_user_id);
+    if (item?.project_owner_user_id) return Number(item.project_owner_user_id);
+    const members = sameId(projectId, state.currentProjectId) ? state.projectMembers : [];
+    const flagged = members.find((m) => Number(m.is_owner) === 1);
+    if (flagged?.user_id) return Number(flagged.user_id);
+    const admin = members.find((m) => m.role === 'admin');
+    if (admin?.user_id) return Number(admin.user_id);
+    return null;
+  }
+
+  function projectOwnerMember(projectId) {
+    const ownerUserId = resolvedProjectOwnerUserId(projectId);
+    if (!ownerUserId) return null;
+    return state.projectMembers.find((m) => sameId(m.user_id, ownerUserId)) || null;
   }
 
   function projectOwnerAssigneeLabel(projectId) {
@@ -299,21 +320,19 @@
 
   function effectiveAssigneeUserId(item) {
     if (Number(item.assigned_to_project_owner) === 1) {
-      const project = findProject(item.project_id);
-      return project?.owner_user_id ?? null;
+      return item.project_owner_user_id
+        ? Number(item.project_owner_user_id)
+        : resolvedProjectOwnerUserId(item.project_id);
     }
     return item.assigned_user_id ?? null;
   }
 
   function memberOptionsHtml(item) {
-    const project = findProject(item.project_id);
-    const ownerUserId = project?.owner_user_id;
-    const ownerSelected = ownerUserId && Number(item.assigned_to_project_owner) === 1;
+    const ownerUserId = resolvedProjectOwnerUserId(item.project_id);
+    const ownerSelected = Number(item.assigned_to_project_owner) === 1;
     const unassigned = !ownerSelected && !item.assigned_user_id;
     let html = `<option value="" ${unassigned ? 'selected' : ''}>--</option>`;
-    if (ownerUserId) {
-      html += `<option value="${PROJECT_OWNER_ASSIGNEE}" ${ownerSelected ? 'selected' : ''}>${escapeHtml(projectOwnerAssigneeLabel(item.project_id))}</option>`;
-    }
+    html += `<option value="${PROJECT_OWNER_ASSIGNEE}" ${ownerSelected ? 'selected' : ''}>${escapeHtml(projectOwnerAssigneeLabel(item.project_id))}</option>`;
     for (const m of state.projectMembers) {
       if (ownerUserId && sameId(m.user_id, ownerUserId)) continue;
       const sel = !ownerSelected && sameId(m.user_id, item.assigned_user_id) ? 'selected' : '';

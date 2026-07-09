@@ -31,7 +31,15 @@ function user_display_name(?string $name, ?string $email = ''): string {
     return trim((string)$email);
 }
 
-/** SQL expression: owner assignee label — display name, or "Project Owner" when unset. */
+/** SQL expression resolving a project's owner user id (stored owner, else first admin). */
+function sql_project_owner_user_id_expr(string $projectAlias = 'p'): string {
+    return "COALESCE({$projectAlias}.owner_user_id, (
+        SELECT pm_o.user_id FROM project_members pm_o
+        WHERE pm_o.project_id = {$projectAlias}.id AND pm_o.role = 'admin'
+        ORDER BY pm_o.created_at, pm_o.id LIMIT 1
+    ))";
+}
+
 function sql_project_owner_assignee_name(string $ownerAlias = 'ou'): string {
     return "COALESCE(NULLIF(TRIM({$ownerAlias}.name), ''), 'Project Owner')";
 }
@@ -39,8 +47,9 @@ function sql_project_owner_assignee_name(string $ownerAlias = 'ou'): string {
 /** SQL expression: assignee display name for an item row. */
 function sql_item_assignee_name(): string {
     $ownerLabel = sql_project_owner_assignee_name('ou');
+    $ownerExpr = sql_project_owner_user_id_expr('p');
     return "CASE WHEN i.assigned_to_project_owner = 1 THEN
-                CASE WHEN p.owner_user_id IS NULL THEN '--'
+                CASE WHEN ({$ownerExpr}) IS NULL THEN '--'
                      ELSE {$ownerLabel}
                 END
                  ELSE COALESCE(NULLIF(TRIM(u.name), ''), u.email)
