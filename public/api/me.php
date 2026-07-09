@@ -19,13 +19,12 @@ if ($method === 'GET') {
     if ($projectId) {
         permissions_require_project_access($mysqli, $projectId);
         $payload['caps'] = permissions_project_caps($mysqli, $projectId);
-        $payload['project_members'] = permissions_project_members_list($mysqli, $projectId);
-        try {
-            $payload['project_assignees'] = permissions_project_assignee_options_list($mysqli, $projectId);
-        } catch (Throwable $e) {
-            debug_log('project_assignees failed: ' . $e->getMessage());
-            $payload['project_assignees'] = $payload['project_members'];
-        }
+        $assignees = permissions_project_assignee_options_list($mysqli, $projectId);
+        $payload['project_assignees'] = $assignees;
+        $payload['project_members'] = array_values(array_filter(
+            $assignees,
+            static fn(array $m): bool => empty($m['pending_invite'])
+        ));
     }
     respond($payload);
 }

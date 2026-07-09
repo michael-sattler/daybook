@@ -142,6 +142,8 @@
     await loadMeAndCaps();
     await loadProjectMembers();
     await loadItems();
+    mergeProjectAssignees();
+    if (state.items.length) renderItems();
     applyPermissionUI();
     syncFilterbarToggles();
     bindGlobalEvents();
@@ -151,14 +153,13 @@
     const data = await get(`/api/me?project_id=${state.currentProjectId}`);
     state.me = data;
     state.caps = data.caps || null;
-    if (Array.isArray(data.project_assignees) && data.project_assignees.length) {
+    if (Array.isArray(data.project_assignees)) {
       state.projectAssignees = data.project_assignees;
-    } else if (Array.isArray(data.project_members) && data.project_members.length) {
-      state.projectAssignees = data.project_members;
     }
     if (Array.isArray(data.project_members)) {
       state.projectMembers = data.project_members;
     }
+    mergeProjectAssignees();
     const project = findProject(state.currentProjectId);
     if (project && state.caps) {
       if (state.caps.owner_name) project.owner_name = state.caps.owner_name;
@@ -182,6 +183,22 @@
     return role.charAt(0).toUpperCase() + role.slice(1);
   }
 
+  function mergeProjectAssignees() {
+    const merged = new Map();
+    const add = (member) => {
+      if (member?.user_id == null || member.user_id === '') return;
+      const key = Number(member.user_id);
+      if (!Number.isFinite(key)) return;
+      const existing = merged.get(key);
+      if (!existing || Number(member.pending_invite) !== 1) {
+        merged.set(key, member);
+      }
+    };
+    for (const member of state.projectMembers || []) add(member);
+    for (const member of state.projectAssignees || []) add(member);
+    state.projectAssignees = [...merged.values()];
+  }
+
   async function loadProjectAssignees() {
     if (!state.currentProjectId) {
       state.projectAssignees = [];
@@ -189,17 +206,15 @@
     }
     try {
       const assignees = await get(`/api/assignees?project_id=${state.currentProjectId}`);
-      if (Array.isArray(assignees) && assignees.length) {
+      if (Array.isArray(assignees)) {
         state.projectAssignees = assignees;
-        if (state.items.length) renderItems();
-      } else if (state.projectMembers.length) {
-        state.projectAssignees = state.projectMembers.slice();
+        mergeProjectAssignees();
         if (state.items.length) renderItems();
       }
     } catch {
-      if (!state.projectAssignees.length && state.projectMembers.length) {
-        state.projectAssignees = state.projectMembers.slice();
-        if (state.items.length) renderItems();
+      mergeProjectAssignees();
+      if (state.projectAssignees.length && state.items.length) {
+        renderItems();
       } else if (!state.projectAssignees.length) {
         toast('Could not load assignee options', true);
       }
@@ -225,9 +240,8 @@
   }
 
   function assigneeMemberList() {
-    const assignees = Array.isArray(state.projectAssignees) ? state.projectAssignees : [];
-    if (assignees.length) return assignees;
-    return Array.isArray(state.projectMembers) ? state.projectMembers : [];
+    mergeProjectAssignees();
+    return Array.isArray(state.projectAssignees) ? state.projectAssignees : [];
   }
 
   function memberDisplayName(member) {
@@ -363,14 +377,12 @@
   }
 
   function resolvedProjectOwnerUserId(projectId) {
-    const project = findProject(projectId);
-    if (project?.resolved_owner_user_id) return Number(project.resolved_owner_user_id);
-    if (project?.owner_user_id) return Number(project.owner_user_id);
     if (sameId(projectId, state.currentProjectId) && state.caps?.owner_user_id) {
       return Number(state.caps.owner_user_id);
     }
-    const item = state.items.find((i) => sameId(i.project_id, projectId) && i.project_owner_user_id);
-    if (item?.project_owner_user_id) return Number(item.project_owner_user_id);
+    const project = findProject(projectId);
+    if (project?.resolved_owner_user_id) return Number(project.resolved_owner_user_id);
+    if (project?.owner_user_id) return Number(project.owner_user_id);
     const members = sameId(projectId, state.currentProjectId) ? assigneeMemberList() : [];
     const flagged = members.find((m) => Number(m.is_owner) === 1);
     if (flagged?.user_id) return Number(flagged.user_id);
@@ -416,13 +428,12 @@
   }
 
   function memberOptionsHtml(item) {
-    const ownerUserId = resolvedProjectOwnerUserId(item.project_id);
     const ownerSelected = Number(item.assigned_to_project_owner) === 1;
     const unassigned = !ownerSelected && !item.assigned_user_id;
     let html = `<option value="" ${unassigned ? 'selected' : ''}>--</option>`;
     html += `<option value="${PROJECT_OWNER_ASSIGNEE}" ${ownerSelected ? 'selected' : ''}>${escapeHtml(projectOwnerAssigneeLabel(item.project_id, item))}</option>`;
     for (const m of assigneeMemberList()) {
-      if (ownerUserId && sameId(m.user_id, ownerUserId)) continue;
+      if (Number(m.is_owner) === 1) continue;
       const sel = !ownerSelected && sameId(m.user_id, item.assigned_user_id) ? 'selected' : '';
       html += `<option value="${m.user_id}" ${sel}>${escapeHtml(memberLabel(m))}</option>`;
     }
@@ -475,6 +486,8 @@
     await loadMeAndCaps();
     await loadProjectMembers();
     await loadItems();
+    mergeProjectAssignees();
+    if (state.items.length) renderItems();
     applyPermissionUI();
   }
 
