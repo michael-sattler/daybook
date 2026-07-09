@@ -50,7 +50,10 @@ if ($method === 'GET') {
     $stmt->execute();
     $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
     foreach ($rows as &$row) {
+        $pid = (int)$row['id'];
         $row['is_owner'] = (int)$row['owner_user_id'] === $userId;
+        $row['resolved_owner_user_id'] = permissions_project_owner_id($mysqli, $pid);
+        $row['owner_name'] = permissions_project_owner_display_name($mysqli, $pid);
     }
     unset($row);
     respond($rows);

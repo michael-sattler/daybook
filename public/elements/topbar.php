@@ -12,7 +12,7 @@
       </button>
       <ul id="user-menu-dropdown" class="user-menu-dropdown hidden" role="menu">
         <li role="none">
-          <button type="button" id="user-menu-projects" class="user-menu-option" role="menuitem">Edit projects</button>
+          <button type="button" id="user-menu-projects" class="user-menu-option" role="menuitem">Projects</button>
         </li>
         <li role="none">
           <a href="/account" class="user-menu-option" role="menuitem">Account settings</a>

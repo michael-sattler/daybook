@@ -150,6 +150,11 @@
     const data = await get(`/api/me?project_id=${state.currentProjectId}`);
     state.me = data;
     state.caps = data.caps || null;
+    const project = findProject(state.currentProjectId);
+    if (project && state.caps) {
+      if (state.caps.owner_name) project.owner_name = state.caps.owner_name;
+      if (state.caps.owner_user_id) project.resolved_owner_user_id = state.caps.owner_user_id;
+    }
     renderProjectStrip();
   }
 
@@ -250,11 +255,21 @@
     return [header, ...rows].join('\n');
   }
 
+  let copyTaskListIconTimer;
+
+  function showCopyTaskListSuccess() {
+    const icon = document.getElementById('export-tasklist-copied');
+    if (!icon) return;
+    icon.classList.remove('hidden');
+    clearTimeout(copyTaskListIconTimer);
+    copyTaskListIconTimer = setTimeout(() => icon.classList.add('hidden'), 2000);
+  }
+
   async function copyTaskListExport() {
     const text = buildTaskListExportText();
     try {
       await navigator.clipboard.writeText(text);
-      toast('Task list copied to clipboard');
+      showCopyTaskListSuccess();
     } catch (e) {
       toast('Could not copy to clipboard', true);
     }
@@ -292,6 +307,7 @@
 
   function resolvedProjectOwnerUserId(projectId) {
     const project = findProject(projectId);
+    if (project?.resolved_owner_user_id) return Number(project.resolved_owner_user_id);
     if (project?.owner_user_id) return Number(project.owner_user_id);
     if (sameId(projectId, state.currentProjectId) && state.caps?.owner_user_id) {
       return Number(state.caps.owner_user_id);
@@ -313,9 +329,17 @@
   }
 
   function projectOwnerAssigneeLabel(projectId) {
+    const project = findProject(projectId);
+    const fromProject = String(project?.owner_name ?? '').trim();
+    if (fromProject) return fromProject;
+    if (sameId(projectId, state.currentProjectId)) {
+      const capsName = String(state.caps?.owner_name ?? '').trim();
+      if (capsName) return capsName;
+    }
     const owner = projectOwnerMember(projectId);
-    const name = String(owner?.name ?? '').trim();
-    return name || 'Project Owner';
+    const memberName = String(owner?.name ?? '').trim();
+    if (memberName) return memberName;
+    return 'Project Owner';
   }
 
   function effectiveAssigneeUserId(item) {
@@ -914,11 +938,11 @@
   // ---------- option list modals (categories / subsystems / priorities / statuses / projects) ----------
 
   const OPTION_CONFIG = {
-    categories: { endpoint: '/api/categories', title: 'Manage Categories', projectScoped: true, hasColor: false },
-    subsystems: { endpoint: '/api/subsystems', title: 'Manage Subsystems', projectScoped: true, hasColor: true },
-    priorities: { endpoint: '/api/priorities', title: 'Manage Priorities', projectScoped: true, hasColor: true },
+    categories: { endpoint: '/api/categories', title: 'Categories', projectScoped: true, hasColor: false },
+    subsystems: { endpoint: '/api/subsystems', title: 'Subsystems', projectScoped: true, hasColor: true },
+    priorities: { endpoint: '/api/priorities', title: 'Priorities', projectScoped: true, hasColor: true },
     statuses: { endpoint: '/api/statuses', title: 'Manage Statuses', projectScoped: false, hasColor: true },
-    projects: { endpoint: '/api/projects', title: 'Manage Projects', projectScoped: false, hasColor: true },
+    projects: { endpoint: '/api/projects', title: 'Projects', projectScoped: false, hasColor: true },
   };
   let currentOptionType = null;
 

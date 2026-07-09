@@ -37,7 +37,10 @@ ob_start();
   </div>
   <div class="filterbar-actions">
     <button id="export-btn" class="link-btn" type="button"><i class="fa-solid fa-file-csv"></i> Export CSV</button>
-    <button id="export-tasklist-btn" class="link-btn" type="button"><i class="fa-solid fa-clipboard"></i> Copy Task List</button>
+    <span class="export-tasklist-wrap">
+      <button id="export-tasklist-btn" class="link-btn" type="button"><i class="fa-solid fa-clipboard"></i> Copy Task List</button>
+      <i id="export-tasklist-copied" class="fa-solid fa-circle-check export-tasklist-copied hidden" aria-hidden="true" title="Copied"></i>
+    </span>
     <div class="filterbar-config" id="filterbar-config">
       <button type="button" id="filter-config-toggle" class="config-pill" aria-expanded="false" aria-haspopup="menu">
         Project Settings <span class="config-pill-chevron" aria-hidden="true">▾</span>

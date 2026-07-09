@@ -32,6 +32,18 @@ function permissions_project_owner_id(mysqli $mysqli, int $projectId): ?int {
     return $row && $row['owner_user_id'] ? (int)$row['owner_user_id'] : null;
 }
 
+function permissions_project_owner_display_name(mysqli $mysqli, int $projectId): string {
+    $ownerId = permissions_project_owner_id($mysqli, $projectId);
+    if (!$ownerId) {
+        return '';
+    }
+    $stmt = $mysqli->prepare('SELECT name FROM users WHERE id = ?');
+    $stmt->bind_param('i', $ownerId);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    return trim((string)($row['name'] ?? ''));
+}
+
 function permissions_is_project_owner(mysqli $mysqli, int $projectId, int $userId): bool {
     $ownerId = permissions_project_owner_id($mysqli, $projectId);
     return $ownerId !== null && $ownerId === $userId;
@@ -339,6 +351,7 @@ function permissions_project_caps(mysqli $mysqli, int $projectId): array {
         'is_daybookstaff' => is_daybookstaff(),
         'is_owner' => $isOwner,
         'owner_user_id' => permissions_project_owner_id($mysqli, $projectId),
+        'owner_name' => permissions_project_owner_display_name($mysqli, $projectId),
         'can_edit_project' => permissions_can_edit_project($mysqli, $projectId),
         'can_delete_project' => permissions_can_delete_project($mysqli, $projectId),
         'can_manage_members' => permissions_can_manage_members($mysqli, $projectId),
