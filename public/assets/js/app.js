@@ -39,6 +39,7 @@
   };
 
   const PROJECT_COOKIE = 'daybook_project';
+  const PROJECT_OWNER_ASSIGNEE = 'owner';
 
   function getProjectCookie() {
     const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${PROJECT_COOKIE}=([^;]*)`));
@@ -216,22 +217,31 @@
     });
   }
 
+  function taskListTaggedField(label, value) {
+    const text = taskListExportField(value);
+    return text ? `[${label}]: ${text}` : '';
+  }
+
+  function taskListTaggedLine(fields) {
+    return fields
+      .map(([label, value]) => taskListTaggedField(label, value))
+      .filter(Boolean)
+      .join(' ');
+  }
+
   function buildTaskListExportText() {
     const project = findProject(state.currentProjectId);
     const projectName = taskListExportField(project?.name) || 'Project';
-    const header = `${projectName} | Task List | ${formatTaskListExportDate(new Date())}`;
-    const rows = itemsForTaskListExport().map((item, index) => {
-      const cols = [
-        index + 1,
-        taskListExportField(item.item_text),
-        taskListExportField(item.priority_name),
-        taskListExportField(item.category_name),
-        taskListExportField(item.subsystem_name),
-        taskListExportField(item.assignee_name || item.assignee_email),
-        taskListExportField(item.status_name),
-      ];
-      return cols.join(' | ');
-    });
+    const header = `${projectName}: Task List | ${formatTaskListExportDate(new Date())}`;
+    const rows = itemsForTaskListExport().map((item, index) => taskListTaggedLine([
+      ['#', index + 1],
+      ['item', item.item_text],
+      ['priority', item.priority_name],
+      ['category', item.category_name],
+      ['subsystem', item.subsystem_name],
+      ['assignee', item.assignee_name || item.assignee_email],
+      ['status', item.status_name],
+    ]));
     return [header, ...rows].join('\n');
   }
 
@@ -250,7 +260,7 @@
     if (caps.is_daybookstaff) return true;
     if (['admin', 'manager'].includes(caps.role)) return true;
     if (caps.role === 'contributor') {
-      return Number(item.assigned_user_id) === Number(state.me?.id);
+      return Number(effectiveAssigneeUserId(item)) === Number(state.me?.id);
     }
     return false;
   }
@@ -275,10 +285,38 @@
     return name || member.email || '';
   }
 
-  function memberOptionsHtml(selectedId) {
-    let html = '<option value="">—</option>';
+  function projectOwnerMember(projectId) {
+    const project = findProject(projectId);
+    if (!project) return null;
+    return state.projectMembers.find((m) => m.is_owner || sameId(m.user_id, project.owner_user_id)) || null;
+  }
+
+  function projectOwnerAssigneeLabel(projectId) {
+    const owner = projectOwnerMember(projectId);
+    const name = String(owner?.name ?? '').trim();
+    return name || 'Project Owner';
+  }
+
+  function effectiveAssigneeUserId(item) {
+    if (Number(item.assigned_to_project_owner) === 1) {
+      const project = findProject(item.project_id);
+      return project?.owner_user_id ?? null;
+    }
+    return item.assigned_user_id ?? null;
+  }
+
+  function memberOptionsHtml(item) {
+    const project = findProject(item.project_id);
+    const ownerUserId = project?.owner_user_id;
+    const ownerSelected = ownerUserId && Number(item.assigned_to_project_owner) === 1;
+    const unassigned = !ownerSelected && !item.assigned_user_id;
+    let html = `<option value="" ${unassigned ? 'selected' : ''}>--</option>`;
+    if (ownerUserId) {
+      html += `<option value="${PROJECT_OWNER_ASSIGNEE}" ${ownerSelected ? 'selected' : ''}>${escapeHtml(projectOwnerAssigneeLabel(item.project_id))}</option>`;
+    }
     for (const m of state.projectMembers) {
-      const sel = String(m.user_id) === String(selectedId) ? 'selected' : '';
+      if (ownerUserId && sameId(m.user_id, ownerUserId)) continue;
+      const sel = !ownerSelected && sameId(m.user_id, item.assigned_user_id) ? 'selected' : '';
       html += `<option value="${m.user_id}" ${sel}>${escapeHtml(memberLabel(m))}</option>`;
     }
     return html;
@@ -560,7 +598,7 @@
       <td class="col-priority"><select data-field="priority_id" ${fieldsEditable ? '' : 'disabled'}>${optionsHtml(state.priorities, item.priority_id)}</select></td>
       <td class="col-order">${state.orderBy === 'priority' && item.priority_id && reorderable ? '<span class="drag-handle" title="Drag to reorder">⠿</span> ' : ''}${item.order_in_priority || ''}</td>
       <td class="col-status"><select data-field="status_id" ${statusEditable ? '' : 'disabled'}>${optionsHtml(state.statuses, item.status_id)}</select></td>
-      <td class="col-assignee"><select data-field="assigned_user_id" ${assignEditable ? '' : 'disabled'}>${memberOptionsHtml(item.assigned_user_id)}</select></td>
+      <td class="col-assignee"><select data-field="assigned_user_id" ${assignEditable ? '' : 'disabled'}>${memberOptionsHtml(item)}</select></td>
       <td class="col-docs"><button class="link-btn detail-btn" data-tab="docs">Docs</button></td>
       <td class="col-notes"><button class="link-btn detail-btn" data-tab="notes">Notes</button></td>
       <td class="col-actions">${showDelete ? '<button class="icon-btn delete-item-btn" title="Delete">✕</button>' : ''}</td>

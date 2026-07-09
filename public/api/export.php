@@ -21,14 +21,17 @@ if ($vis !== '1=1') {
 }
 
 $sql = "SELECT i.sort_order, i.item_text, c.name AS category, sub.name AS subsystem,
-               i.url, pr.name AS priority, s.name AS status,
-               COALESCE(NULLIF(TRIM(u.name), ''), u.email) AS assignee
+               i.url, pr.name AS priority,
+               " . sql_item_assignee_name() . " AS assignee,
+               s.name AS status
         FROM items i
+        LEFT JOIN projects p ON p.id = i.project_id
         LEFT JOIN categories c ON c.id = i.category_id
         LEFT JOIN subsystems sub ON sub.id = i.subsystem_id
         LEFT JOIN priorities pr ON pr.id = i.priority_id
         LEFT JOIN statuses s ON s.id = i.status_id
         LEFT JOIN users u ON u.id = i.assigned_user_id
+        LEFT JOIN users ou ON ou.id = p.owner_user_id
         WHERE " . implode(' AND ', $where) . '
         ORDER BY i.sort_order';
 

@@ -93,6 +93,7 @@ CREATE TABLE IF NOT EXISTS items (
   project_id INT NOT NULL,
   created_by_user_id INT NULL,
   assigned_user_id INT NULL,
+  assigned_to_project_owner TINYINT(1) NOT NULL DEFAULT 0,
   category_id INT NULL,
   subsystem_id INT NULL,
   item_text TEXT NOT NULL,

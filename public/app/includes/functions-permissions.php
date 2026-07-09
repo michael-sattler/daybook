@@ -34,11 +34,23 @@ function permissions_is_project_owner(mysqli $mysqli, int $projectId, int $userI
     return $ownerId !== null && $ownerId === $userId;
 }
 
+function permissions_item_effective_assignee_id(array $item): ?int {
+    if (!empty($item['assigned_to_project_owner'])) {
+        $ownerId = $item['project_owner_user_id'] ?? null;
+        return $ownerId ? (int)$ownerId : null;
+    }
+    return !empty($item['assigned_user_id']) ? (int)$item['assigned_user_id'] : null;
+}
+
 function permissions_has_assignment_in_project(mysqli $mysqli, int $projectId, int $userId): bool {
     $stmt = $mysqli->prepare(
-        'SELECT 1 FROM items WHERE project_id = ? AND assigned_user_id = ? LIMIT 1'
+        'SELECT 1 FROM items i
+         INNER JOIN projects p ON p.id = i.project_id
+         WHERE i.project_id = ?
+           AND (i.assigned_user_id = ? OR (i.assigned_to_project_owner = 1 AND p.owner_user_id = ?))
+         LIMIT 1'
     );
-    $stmt->bind_param('ii', $projectId, $userId);
+    $stmt->bind_param('iii', $projectId, $userId, $userId);
     $stmt->execute();
     return (bool)$stmt->get_result()->fetch_row();
 }
@@ -271,7 +283,8 @@ function permissions_can_edit_item(mysqli $mysqli, array $item, string $field): 
     }
 
     if ($role === 'contributor') {
-        return !empty($item['assigned_user_id']) && (int)$item['assigned_user_id'] === $userId;
+        $assigneeId = permissions_item_effective_assignee_id($item);
+        return $assigneeId !== null && $assigneeId === $userId;
     }
 
     return false;
@@ -305,10 +318,9 @@ function permissions_can_edit_docs_notes(mysqli $mysqli, array $item): bool {
         return true;
     }
     $role = permissions_current_project_role($mysqli, $projectId);
-    if (in_array($role, ['admin', 'manager', 'contributor'], true)
-        && !empty($item['assigned_user_id'])
-        && (int)$item['assigned_user_id'] === $userId) {
-        return true;
+    if (in_array($role, ['admin', 'manager', 'contributor'], true)) {
+        $assigneeId = permissions_item_effective_assignee_id($item);
+        return $assigneeId !== null && $assigneeId === $userId;
     }
     return false;
 }

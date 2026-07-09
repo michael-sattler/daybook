@@ -17,11 +17,43 @@ const FIELD_TYPES = [
 
 const PENDING_STATUS_NAMES = ['TODO', 'UNDERWAY', 'BLOCKED'];
 
+function assignment_from_input(mixed $value): array {
+    if ($value === 'owner') {
+        return ['assigned_to_project_owner' => 1, 'assigned_user_id' => null];
+    }
+    if ($value === '' || $value === null) {
+        return ['assigned_to_project_owner' => 0, 'assigned_user_id' => null];
+    }
+    return ['assigned_to_project_owner' => 0, 'assigned_user_id' => (int)$value];
+}
+
+function append_assignment_sets(array &$sets, array &$types, array &$params, mixed $value): void {
+    $assignment = assignment_from_input($value);
+    $sets[] = 'assigned_to_project_owner = ?';
+    $types .= 'i';
+    $params[] = $assignment['assigned_to_project_owner'];
+    $sets[] = 'assigned_user_id = ?';
+    $types .= 'i';
+    $params[] = $assignment['assigned_user_id'];
+}
+
+function require_valid_assignment(mysqli $mysqli, int $projectId, mixed $value): array {
+    $assignment = assignment_from_input($value);
+    if ($assignment['assigned_to_project_owner'] && !permissions_project_owner_id($mysqli, $projectId)) {
+        fail('This project has no owner', 400);
+    }
+    return $assignment;
+}
+
 function item_select_sql(): string {
     return "SELECT i.id, i.sort_order, i.project_id, p.name AS project_name,
                    p.bg_color AS project_bg_color, p.text_color AS project_text_color,
-                   i.created_by_user_id, i.assigned_user_id,
-                   u.name AS assignee_name, u.email AS assignee_email,
+                   p.owner_user_id AS project_owner_user_id,
+                   i.created_by_user_id, i.assigned_user_id, i.assigned_to_project_owner,
+                   " . sql_item_assignee_name() . " AS assignee_name,
+                   CASE WHEN i.assigned_to_project_owner = 1 THEN ou.email
+                        ELSE u.email
+                   END AS assignee_email,
                    i.category_id, c.name AS category_name,
                    i.subsystem_id, sub.name AS subsystem_name,
                    sub.bg_color AS subsystem_bg_color, sub.text_color AS subsystem_text_color,
@@ -35,6 +67,7 @@ function item_select_sql(): string {
             FROM items i
             LEFT JOIN projects p ON p.id = i.project_id
             LEFT JOIN users u ON u.id = i.assigned_user_id
+            LEFT JOIN users ou ON ou.id = p.owner_user_id
             LEFT JOIN categories c ON c.id = i.category_id
             LEFT JOIN subsystems sub ON sub.id = i.subsystem_id
             LEFT JOIN priorities pr ON pr.id = i.priority_id
@@ -134,20 +167,22 @@ if ($method === 'POST') {
     $itemText = $body['item_text'] ?? '';
     $url = $body['url'] ?? '';
     $statusId = !empty($body['status_id']) ? (int)$body['status_id'] : null;
-    $assignedUserId = !empty($body['assigned_user_id']) ? (int)$body['assigned_user_id'] : null;
-    if ($assignedUserId && !permissions_can_assign_items($mysqli, $projectId)) {
+    if (array_key_exists('assigned_user_id', $body) && !permissions_can_assign_items($mysqli, $projectId)) {
         fail('Forbidden', 403);
     }
+    $assignment = require_valid_assignment($mysqli, $projectId, $body['assigned_user_id'] ?? null);
+    $assignedUserId = $assignment['assigned_user_id'];
+    $assignedToProjectOwner = $assignment['assigned_to_project_owner'];
     $createdBy = current_user_id();
     $now = time();
 
     $stmt = $mysqli->prepare('INSERT INTO items
-        (sort_order, project_id, created_by_user_id, assigned_user_id, category_id, subsystem_id,
-         item_text, url, priority_id, order_in_priority, status_id, created_at, updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
+        (sort_order, project_id, created_by_user_id, assigned_user_id, assigned_to_project_owner,
+         category_id, subsystem_id, item_text, url, priority_id, order_in_priority, status_id, created_at, updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
     $stmt->bind_param(
-        'iiiiiissiiiii',
-        $sortOrder, $projectId, $createdBy, $assignedUserId, $categoryId, $subsystemId,
+        'iiiiiiissiiiii',
+        $sortOrder, $projectId, $createdBy, $assignedUserId, $assignedToProjectOwner, $categoryId, $subsystemId,
         $itemText, $url, $priorityId, $orderInPriority, $statusId, $now, $now
     );
     $stmt->execute();
@@ -170,12 +205,18 @@ if ($method === 'PUT') {
     $types = '';
     $params = [];
     foreach (EDITABLE_FIELDS as $field) {
-        if (array_key_exists($field, $body)) {
-            $sets[] = "$field = ?";
-            $types .= FIELD_TYPES[$field];
-            $value = $body[$field];
-            $params[] = ($value === '' && str_ends_with($field, '_id')) ? null : $value;
+        if ($field === 'assigned_user_id' || !array_key_exists($field, $body)) {
+            continue;
         }
+        $sets[] = "$field = ?";
+        $types .= FIELD_TYPES[$field];
+        $value = $body[$field];
+        $params[] = ($value === '' && str_ends_with($field, '_id')) ? null : $value;
+    }
+    if (array_key_exists('assigned_user_id', $body)) {
+        $item = permissions_fetch_item($mysqli, $id);
+        require_valid_assignment($mysqli, (int)$item['project_id'], $body['assigned_user_id']);
+        append_assignment_sets($sets, $types, $params, $body['assigned_user_id']);
     }
     if (!$sets) fail('No editable fields supplied');
     $sets[] = 'updated_at = ?';

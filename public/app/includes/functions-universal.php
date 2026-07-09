@@ -31,7 +31,22 @@ function user_display_name(?string $name, ?string $email = ''): string {
     return trim((string)$email);
 }
 
-// mysqli_stmt::bind_param needs its arguments by reference, which rules out a
+/** SQL expression: owner assignee label — display name, or "Project Owner" when unset. */
+function sql_project_owner_assignee_name(string $ownerAlias = 'ou'): string {
+    return "COALESCE(NULLIF(TRIM({$ownerAlias}.name), ''), 'Project Owner')";
+}
+
+/** SQL expression: assignee display name for an item row. */
+function sql_item_assignee_name(): string {
+    $ownerLabel = sql_project_owner_assignee_name('ou');
+    return "CASE WHEN i.assigned_to_project_owner = 1 THEN
+                CASE WHEN p.owner_user_id IS NULL THEN '--'
+                     ELSE {$ownerLabel}
+                END
+                 ELSE COALESCE(NULLIF(TRIM(u.name), ''), u.email)
+            END";
+}
+
 // plain call with a variable-length array. This rebuilds the reference list
 // so callers can bind a dynamic number of params (e.g. partial UPDATE SETs).
 function bind_dynamic(mysqli_stmt $stmt, string $types, array $params): void {
