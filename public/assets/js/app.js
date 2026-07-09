@@ -151,9 +151,9 @@
     const data = await get(`/api/me?project_id=${state.currentProjectId}`);
     state.me = data;
     state.caps = data.caps || null;
-    if (Array.isArray(data.project_assignees)) {
+    if (Array.isArray(data.project_assignees) && data.project_assignees.length) {
       state.projectAssignees = data.project_assignees;
-    } else if (Array.isArray(data.project_members)) {
+    } else if (Array.isArray(data.project_members) && data.project_members.length) {
       state.projectAssignees = data.project_members;
     }
     if (Array.isArray(data.project_members)) {
@@ -194,7 +194,10 @@
         if (state.items.length) renderItems();
       }
     } catch {
-      if (!state.projectAssignees.length) {
+      if (!state.projectAssignees.length && state.projectMembers.length) {
+        state.projectAssignees = state.projectMembers.slice();
+        if (state.items.length) renderItems();
+      } else if (!state.projectAssignees.length) {
         toast('Could not load assignee options', true);
       }
     }
@@ -219,7 +222,19 @@
   }
 
   function assigneeMemberList() {
-    return Array.isArray(state.projectAssignees) ? state.projectAssignees : [];
+    const assignees = Array.isArray(state.projectAssignees) ? state.projectAssignees : [];
+    if (assignees.length) return assignees;
+    return Array.isArray(state.projectMembers) ? state.projectMembers : [];
+  }
+
+  function memberDisplayName(member) {
+    const name = String(member?.name ?? '').trim();
+    return name || member?.email || '';
+  }
+
+  function memberLabel(member) {
+    const base = memberDisplayName(member);
+    return Number(member?.pending_invite) === 1 ? `${base} (invited)` : base;
   }
 
   function applyPermissionUI() {
@@ -340,10 +355,8 @@
     return false;
   }
 
-  function memberLabel(member) {
-    const name = String(member.name ?? '').trim();
-    const base = name || member.email || '';
-    return Number(member.pending_invite) === 1 ? `${base} (invited)` : base;
+  function membersModalLabel(member) {
+    return memberDisplayName(member);
   }
 
   function resolvedProjectOwnerUserId(projectId) {
@@ -355,7 +368,7 @@
     }
     const item = state.items.find((i) => sameId(i.project_id, projectId) && i.project_owner_user_id);
     if (item?.project_owner_user_id) return Number(item.project_owner_user_id);
-    const members = sameId(projectId, state.currentProjectId) ? state.projectMembers : [];
+    const members = sameId(projectId, state.currentProjectId) ? assigneeMemberList() : [];
     const flagged = members.find((m) => Number(m.is_owner) === 1);
     if (flagged?.user_id) return Number(flagged.user_id);
     const admin = members.find((m) => m.role === 'admin');
@@ -366,7 +379,7 @@
   function projectOwnerMember(projectId) {
     const ownerUserId = resolvedProjectOwnerUserId(projectId);
     if (!ownerUserId) return null;
-    return state.projectMembers.find((m) => sameId(m.user_id, ownerUserId)) || null;
+    return assigneeMemberList().find((m) => sameId(m.user_id, ownerUserId)) || null;
   }
 
   function projectOwnerAssigneeLabel(projectId, item) {
@@ -379,7 +392,7 @@
       const capsLabel = String(state.caps?.project_owner_assignee_label ?? state.caps?.owner_name ?? '').trim();
       if (capsLabel) return capsLabel;
     }
-    const byFlag = state.projectMembers.find((m) => sameId(projectId, state.currentProjectId) && Number(m.is_owner) === 1);
+    const byFlag = assigneeMemberList().find((m) => sameId(projectId, state.currentProjectId) && Number(m.is_owner) === 1);
     if (byFlag) {
       const flaggedName = String(byFlag.name ?? '').trim();
       if (flaggedName) return flaggedName;
@@ -1320,7 +1333,7 @@
         `<option value="${r}" ${m.role === r ? 'selected' : ''}>${r}</option>`
       ).join('');
       li.innerHTML = `
-        <span>${escapeHtml(memberLabel(m))}${m.is_owner ? ' (owner)' : ''}</span>
+        <span>${escapeHtml(membersModalLabel(m))}${m.is_owner ? ' (owner)' : ''}</span>
         <select class="member-role-select" data-member-id="${m.id}" ${m.is_owner ? 'disabled' : ''}>${roleSelect}</select>
         ${!m.is_owner ? `<button type="button" class="link-btn remove-member-btn" data-member-id="${m.id}">Remove</button>` : ''}
         ${m.is_owner ? `<button type="button" class="link-btn transfer-owner-btn" data-user-id="${m.user_id}">Transfer ownership</button>` : ''}
@@ -1334,7 +1347,7 @@
         }
       });
       li.querySelector('.remove-member-btn')?.addEventListener('click', async () => {
-        if (!confirm(`Remove ${memberLabel(m)} from this project?`)) return;
+        if (!confirm(`Remove ${membersModalLabel(m)} from this project?`)) return;
         try {
           await del(`/api/members?id=${m.id}`);
           await renderMembersModal();
@@ -1349,7 +1362,7 @@
           return;
         }
         const pick = prompt(`Transfer ownership to which user id? Other members:\n${
-          members.filter((x) => !x.is_owner).map((x) => `${x.user_id}: ${memberLabel(x)}`).join('\n')
+          members.filter((x) => !x.is_owner).map((x) => `${x.user_id}: ${membersModalLabel(x)}`).join('\n')
         }`);
         if (!pick) return;
         try {

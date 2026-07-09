@@ -81,6 +81,16 @@ function permissions_sync_pending_invite_users(mysqli $mysqli, int $projectId): 
     }
 }
 
+/** Whether the users.invite_stub column exists (migration 0009). */
+function permissions_users_has_invite_stub(mysqli $mysqli): bool {
+    static $has = null;
+    if ($has === null) {
+        $result = $mysqli->query("SHOW COLUMNS FROM users LIKE 'invite_stub'");
+        $has = (bool)($result && $result->num_rows > 0);
+    }
+    return $has;
+}
+
 /** Find or create a placeholder user for a pending invite email. */
 function permissions_ensure_user_for_invite_email(mysqli $mysqli, string $email): int {
     $email = strtolower(trim($email));
@@ -95,11 +105,21 @@ function permissions_ensure_user_for_invite_email(mysqli $mysqli, string $email)
     $now = time();
     $hash = password_hash(bin2hex(random_bytes(32)), PASSWORD_DEFAULT);
     $staff = 0;
-    $stub = 1;
-    $ins = $mysqli->prepare(
-        'INSERT INTO users (email, password_hash, is_daybookstaff, invite_stub, created_at) VALUES (?,?,?,?,?)'
-    );
-    $ins->bind_param('ssiii', $email, $hash, $staff, $stub, $now);
+    if (permissions_users_has_invite_stub($mysqli)) {
+        $stub = 1;
+        $ins = $mysqli->prepare(
+            'INSERT INTO users (email, password_hash, is_daybookstaff, invite_stub, created_at) VALUES (?,?,?,?,?)'
+        );
+        $ins->bind_param('ssiii', $email, $hash, $staff, $stub, $now);
+    } else {
+        $ins = $mysqli->prepare(
+            'INSERT INTO users (email, password_hash, is_daybookstaff, created_at) VALUES (?,?,?,?)'
+        );
+        $ins->bind_param('ssii', $email, $hash, $staff, $now);
+    }
+    if (!$ins) {
+        throw new RuntimeException('Could not create invite user: ' . $mysqli->error);
+    }
     $ins->execute();
     return (int)$mysqli->insert_id;
 }
@@ -529,7 +549,13 @@ function accept_project_invite(mysqli $mysqli, string $token, string $password):
 
     $email = strtolower($invite['email']);
     permissions_ensure_user_for_invite_email($mysqli, $email);
-    $check = $mysqli->prepare('SELECT id, invite_stub FROM users WHERE email = ?');
+    $projectId = (int)$invite['project_id'];
+
+    if (permissions_users_has_invite_stub($mysqli)) {
+        $check = $mysqli->prepare('SELECT id, invite_stub FROM users WHERE email = ?');
+    } else {
+        $check = $mysqli->prepare('SELECT id FROM users WHERE email = ?');
+    }
     $check->bind_param('s', $email);
     $check->execute();
     $userRow = $check->get_result()->fetch_assoc();
@@ -537,17 +563,39 @@ function accept_project_invite(mysqli $mysqli, string $token, string $password):
         return ['error' => 'Could not create account', 'code' => 500];
     }
     $userId = (int)$userRow['id'];
-    if (!(int)$userRow['invite_stub']) {
+
+    if (permissions_member_role($mysqli, $projectId, $userId)) {
+        $now = time();
+        $iStmt = $mysqli->prepare('UPDATE project_invites SET accepted_at = ? WHERE id = ?');
+        $inviteId = (int)$invite['id'];
+        $iStmt->bind_param('ii', $now, $inviteId);
+        $iStmt->execute();
+        return ['error' => 'You are already a member of this project', 'code' => 400];
+    }
+
+    $anyMemberStmt = $mysqli->prepare('SELECT 1 FROM project_members WHERE user_id = ? LIMIT 1');
+    $anyMemberStmt->bind_param('i', $userId);
+    $anyMemberStmt->execute();
+    $hasOtherMembership = (bool)$anyMemberStmt->get_result()->fetch_row();
+
+    if (permissions_users_has_invite_stub($mysqli)) {
+        if (!(int)$userRow['invite_stub']) {
+            return ['error' => 'An account with this email already exists. Log in instead.', 'code' => 400];
+        }
+    } elseif ($hasOtherMembership) {
         return ['error' => 'An account with this email already exists. Log in instead.', 'code' => 400];
     }
 
     $now = time();
     $hash = password_hash($password, PASSWORD_DEFAULT);
-    $uStmt = $mysqli->prepare('UPDATE users SET password_hash = ?, invite_stub = 0 WHERE id = ?');
+    if (permissions_users_has_invite_stub($mysqli)) {
+        $uStmt = $mysqli->prepare('UPDATE users SET password_hash = ?, invite_stub = 0 WHERE id = ?');
+    } else {
+        $uStmt = $mysqli->prepare('UPDATE users SET password_hash = ? WHERE id = ?');
+    }
     $uStmt->bind_param('si', $hash, $userId);
     $uStmt->execute();
 
-    $projectId = (int)$invite['project_id'];
     $role = $invite['role'];
     $mStmt = $mysqli->prepare(
         'INSERT INTO project_members (project_id, user_id, role, created_at) VALUES (?,?,?,?)'
