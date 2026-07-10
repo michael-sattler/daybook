@@ -25,12 +25,12 @@ ob_start();
   </div>
   <div class="filterbar-toggles">
     <label class="filter-toggle">
-      <input type="checkbox" id="priority-sort-toggle">
+      <input type="checkbox" id="priority-sort-toggle" checked>
       <span class="filter-toggle-track" aria-hidden="true"></span>
       <span class="filter-toggle-label">Priority Sort</span>
     </label>
     <label class="filter-toggle">
-      <input type="checkbox" id="show-completed-toggle" checked>
+      <input type="checkbox" id="show-completed-toggle">
       <span class="filter-toggle-track" aria-hidden="true"></span>
       <span class="filter-toggle-label">Show completed</span>
     </label>

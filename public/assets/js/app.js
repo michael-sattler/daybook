@@ -31,8 +31,8 @@
     projectMembers: [],
     projectAssignees: [],
     currentProjectId: null,
-    orderBy: 'sort_order', // or 'priority'
-    showCompleted: true,
+    orderBy: 'priority', // or 'sort_order'
+    showCompleted: false,
     filters: { q: '', category_id: '', priority_id: '', status_id: '' },
     detailItemId: null,
     me: null,
