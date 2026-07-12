@@ -784,6 +784,10 @@
       paintColorSelect(sel, state[cfg.list], sel.value, cfg.mode);
       bindColoredSelectDropdown(sel);
     }
+
+    const catSelect = tr.querySelector('select[data-field="category_id"]');
+    paintCategoryCell(catSelect);
+    bindColoredSelectDropdown(catSelect);
     return tr;
   }
 
@@ -812,11 +816,34 @@
     }
   }
 
+  function paintCategoryCell(selectEl) {
+    if (!selectEl) return;
+    const cell = selectEl.closest('td');
+    if (!cell) return;
+
+    const cat = state.categories.find((c) => String(c.id) === String(selectEl.value));
+    const isBug = !!cat && String(cat.name).trim().toLowerCase() === 'bug';
+
+    cell.classList.remove('cell-colored', 'cell-fill');
+    if (isBug) {
+      cell.classList.add('cell-colored', 'cell-fill');
+      cell.style.setProperty('--cell-bg', '#dc4f4f');
+      cell.style.setProperty('--cell-text', '#ffffff');
+    } else {
+      cell.style.removeProperty('--cell-bg');
+      cell.style.removeProperty('--cell-text');
+    }
+  }
+
   function bindColoredSelectDropdown(selectEl) {
     if (!selectEl || selectEl.dataset.dropdownNeutral) return;
     selectEl.dataset.dropdownNeutral = '1';
 
     const repaint = () => {
+      if (selectEl.dataset.field === 'category_id') {
+        paintCategoryCell(selectEl);
+        return;
+      }
       const cfg = FIELD_COLOR_CONFIG[selectEl.dataset.field];
       if (cfg) paintColorSelect(selectEl, state[cfg.list], selectEl.value, cfg.mode);
     };
@@ -879,6 +906,7 @@
         saveItemField(item.id, el.dataset.field, el.value);
         const colorCfg = FIELD_COLOR_CONFIG[el.dataset.field];
         if (colorCfg) paintColorSelect(el, state[colorCfg.list], el.value, colorCfg.mode);
+        if (el.dataset.field === 'category_id') paintCategoryCell(el);
         if (el.dataset.field === 'priority_id') tr.dataset.priorityId = el.value || '';
       });
     });
