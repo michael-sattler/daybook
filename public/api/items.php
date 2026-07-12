@@ -10,11 +10,6 @@ $method = $_SERVER['REQUEST_METHOD'];
 const EDITABLE_FIELDS = [
     'category_id', 'subsystem_id', 'item_text', 'url', 'priority_id', 'status_id', 'project_id', 'assigned_user_id', 'due_date',
 ];
-const FIELD_TYPES = [
-    'category_id' => 's', 'subsystem_id' => 's', 'item_text' => 's',
-    'url' => 's', 'priority_id' => 's', 'status_id' => 's', 'project_id' => 's', 'assigned_user_id' => 's',
-    'due_date' => 's',
-];
 
 function normalize_due_date(mixed $value): ?string {
     if ($value === null || $value === '') {
@@ -43,14 +38,20 @@ function assignment_from_input(mixed $value): array {
     return ['assigned_to_project_owner' => 0, 'assigned_user_id' => (int)$value];
 }
 
-function append_assignment_sets(array &$sets, array &$types, array &$params, mixed $value): void {
-    $assignment = assignment_from_input($value);
-    $sets[] = 'assigned_to_project_owner = ?';
-    $types .= 'i';
-    $params[] = $assignment['assigned_to_project_owner'];
-    $sets[] = 'assigned_user_id = ?';
-    $types .= 'i';
-    $params[] = $assignment['assigned_user_id'];
+/** Render a nullable integer as a SQL literal (empty/null -> NULL). */
+function sql_nullable_int(mixed $value): string {
+    if ($value === null || $value === '') {
+        return 'NULL';
+    }
+    return (string)(int)$value;
+}
+
+/** Render a nullable string as an escaped, quoted SQL literal (null -> NULL). */
+function sql_quoted_string(mysqli $mysqli, ?string $value): string {
+    if ($value === null) {
+        return 'NULL';
+    }
+    return "'" . $mysqli->real_escape_string($value) . "'";
 }
 
 function require_valid_assignment(mysqli $mysqli, int $projectId, mixed $value): array {
@@ -207,16 +208,29 @@ if ($method === 'POST') {
     $createdBy = current_user_id();
     $now = time();
 
-    $stmt = $mysqli->prepare('INSERT INTO items
+    $sql = 'INSERT INTO items
         (sort_order, project_id, created_by_user_id, assigned_user_id, assigned_to_project_owner,
          category_id, subsystem_id, item_text, url, priority_id, order_in_priority, status_id, due_date, created_at, updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
-    $stmt->bind_param(
-        'iiiiiiissiiisii',
-        $sortOrder, $projectId, $createdBy, $assignedUserId, $assignedToProjectOwner, $categoryId, $subsystemId,
-        $itemText, $url, $priorityId, $orderInPriority, $statusId, $dueDate, $now, $now
-    );
-    $stmt->execute();
+        VALUES ('
+        . (int)$sortOrder . ', '
+        . (int)$projectId . ', '
+        . sql_nullable_int($createdBy) . ', '
+        . sql_nullable_int($assignedUserId) . ', '
+        . (int)$assignedToProjectOwner . ', '
+        . sql_nullable_int($categoryId) . ', '
+        . sql_nullable_int($subsystemId) . ', '
+        . sql_quoted_string($mysqli, (string)$itemText) . ', '
+        . sql_quoted_string($mysqli, (string)$url) . ', '
+        . sql_nullable_int($priorityId) . ', '
+        . (int)$orderInPriority . ', '
+        . sql_nullable_int($statusId) . ', '
+        . sql_quoted_string($mysqli, $dueDate) . ', '
+        . (int)$now . ', '
+        . (int)$now . ')';
+    if (!$mysqli->query($sql)) {
+        debug_log('item insert failed: ' . $mysqli->error . ' | SQL: ' . $sql);
+        fail('Could not create item: ' . $mysqli->error, 500);
+    }
     respond(fetch_one_item($mysqli, $mysqli->insert_id), 201);
 }
 
@@ -233,35 +247,32 @@ if ($method === 'PUT') {
     }
 
     $sets = [];
-    $types = '';
-    $params = [];
     foreach (EDITABLE_FIELDS as $field) {
         if ($field === 'assigned_user_id' || !array_key_exists($field, $body)) {
             continue;
         }
-        $sets[] = "$field = ?";
-        $types .= FIELD_TYPES[$field];
         $value = $body[$field];
         if ($field === 'due_date') {
-            $params[] = normalize_due_date($value);
+            $sets[] = 'due_date = ' . sql_quoted_string($mysqli, normalize_due_date($value));
+        } elseif (str_ends_with($field, '_id')) {
+            $sets[] = "$field = " . sql_nullable_int($value);
         } else {
-            $params[] = ($value === '' && str_ends_with($field, '_id')) ? null : $value;
+            $sets[] = "$field = " . sql_quoted_string($mysqli, (string)$value);
         }
     }
     if (array_key_exists('assigned_user_id', $body)) {
         $item = permissions_fetch_item($mysqli, $id);
-        require_valid_assignment($mysqli, (int)$item['project_id'], $body['assigned_user_id']);
-        append_assignment_sets($sets, $types, $params, $body['assigned_user_id']);
+        $assignment = require_valid_assignment($mysqli, (int)$item['project_id'], $body['assigned_user_id']);
+        $sets[] = 'assigned_to_project_owner = ' . (int)$assignment['assigned_to_project_owner'];
+        $sets[] = 'assigned_user_id = ' . sql_nullable_int($assignment['assigned_user_id']);
     }
     if (!$sets) fail('No editable fields supplied');
-    $sets[] = 'updated_at = ?';
-    $types .= 'i';
-    $params[] = time();
-    $types .= 'i';
-    $params[] = $id;
-    $stmt = $mysqli->prepare('UPDATE items SET ' . implode(', ', $sets) . ' WHERE id = ?');
-    bind_dynamic($stmt, $types, $params);
-    $stmt->execute();
+    $sets[] = 'updated_at = ' . time();
+    $sql = 'UPDATE items SET ' . implode(', ', $sets) . ' WHERE id = ' . (int)$id;
+    if (!$mysqli->query($sql)) {
+        debug_log('item update failed: ' . $mysqli->error . ' | SQL: ' . $sql);
+        fail('Could not save changes: ' . $mysqli->error, 500);
+    }
 
     if (array_key_exists('priority_id', $body)) {
         $newPriorityId = !empty($body['priority_id']) ? (int)$body['priority_id'] : null;
