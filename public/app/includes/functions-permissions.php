@@ -147,10 +147,35 @@ function permissions_repair_project_membership(mysqli $mysqli, int $projectId): 
         }
     }
 
+    // If an owner is already resolvable (stored owner, or an admin member), we're done.
+    if (permissions_project_owner_id($mysqli, $projectId)) {
+        return;
+    }
+
+    // Members exist but no owner is resolvable (no stored owner and no admin member):
+    // promote the earliest member to admin and record them as the project owner so the
+    // "Project Owner" assignee option always resolves to a real person.
     $countStmt = $mysqli->prepare('SELECT COUNT(*) FROM project_members WHERE project_id = ?');
     $countStmt->bind_param('i', $projectId);
     $countStmt->execute();
     if ((int)$countStmt->get_result()->fetch_row()[0] > 0) {
+        $firstStmt = $mysqli->prepare(
+            'SELECT user_id FROM project_members WHERE project_id = ? ORDER BY created_at, id LIMIT 1'
+        );
+        $firstStmt->bind_param('i', $projectId);
+        $firstStmt->execute();
+        $firstMember = $firstStmt->get_result()->fetch_assoc();
+        if ($firstMember) {
+            $promoteId = (int)$firstMember['user_id'];
+            $promote = $mysqli->prepare(
+                "UPDATE project_members SET role = 'admin' WHERE project_id = ? AND user_id = ?"
+            );
+            $promote->bind_param('ii', $projectId, $promoteId);
+            $promote->execute();
+            $upd = $mysqli->prepare('UPDATE projects SET owner_user_id = ? WHERE id = ? AND owner_user_id IS NULL');
+            $upd->bind_param('ii', $promoteId, $projectId);
+            $upd->execute();
+        }
         return;
     }
 
