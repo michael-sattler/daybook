@@ -4,41 +4,110 @@ require_once __DIR__ . '/app/includes/functions-universal.php';
 require_once __DIR__ . '/app/includes/functions-permissions.php';
 require_login();
 
-$userId = current_user_id();
+$userId = (int)current_user_id();
 
 // Completed statuses match the task grid ("Show completed" / active_only).
 $completedStatuses = ['OK', 'N/A'];
 
-if (is_daybookstaff()) {
-    $sql = 'SELECT p.id, p.name, p.description, p.slug, p.sort_order, p.bg_color, p.text_color, p.owner_user_id,
-                   pm.role AS my_role
-            FROM projects p
-            LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ?
-            ORDER BY p.sort_order, p.id';
-} else {
-    $sql = 'SELECT p.id, p.name, p.description, p.slug, p.sort_order, p.bg_color, p.text_color, p.owner_user_id,
-                   pm.role AS my_role
-            FROM projects p
-            INNER JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ?
-            ORDER BY p.sort_order, p.id';
+function project_card_query_projects(mysqli $mysqli, int $userId, bool $includeDescription): ?array {
+    $descCol = $includeDescription ? 'p.description,' : '';
+    if (is_daybookstaff()) {
+        $sql = "SELECT p.id, p.name, {$descCol} p.slug, p.sort_order, p.bg_color, p.text_color, p.owner_user_id,
+                       pm.role AS my_role
+                FROM projects p
+                LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = {$userId}
+                ORDER BY p.sort_order, p.id";
+    } else {
+        $sql = "SELECT p.id, p.name, {$descCol} p.slug, p.sort_order, p.bg_color, p.text_color, p.owner_user_id,
+                       pm.role AS my_role
+                FROM projects p
+                INNER JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = {$userId}
+                ORDER BY p.sort_order, p.id";
+    }
+    $result = $mysqli->query($sql);
+    if (!$result) {
+        return null;
+    }
+    return $result->fetch_all(MYSQLI_ASSOC);
 }
-$stmt = $mysqli->prepare($sql);
-$stmt->bind_param('i', $userId);
-$stmt->execute();
-$projects = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+
+function project_card_can_see_all_items(mysqli $mysqli, int $projectId, int $userId): bool {
+    if (is_daybookstaff()) {
+        return true;
+    }
+    $pid = (int)$projectId;
+    $uid = (int)$userId;
+    $roleResult = $mysqli->query(
+        "SELECT role FROM project_members WHERE project_id = {$pid} AND user_id = {$uid} LIMIT 1"
+    );
+    $roleRow = $roleResult ? $roleResult->fetch_assoc() : null;
+    if (($roleRow['role'] ?? '') === 'admin') {
+        return true;
+    }
+    $ownerExpr = sql_project_owner_user_id_expr('p');
+    $assignResult = $mysqli->query(
+        "SELECT 1 FROM items i
+         INNER JOIN projects p ON p.id = i.project_id
+         WHERE i.project_id = {$pid}
+           AND (i.assigned_user_id = {$uid} OR (i.assigned_to_project_owner = 1 AND {$ownerExpr} = {$uid}))
+         LIMIT 1"
+    );
+    return $assignResult && (bool)$assignResult->fetch_row();
+}
+
+function project_card_visibility_clause(mysqli $mysqli, int $projectId, int $userId, string $alias = 'i'): string {
+    if (project_card_can_see_all_items($mysqli, $projectId, $userId)) {
+        return '1=1';
+    }
+    $uid = (int)$userId;
+    return "({$alias}.created_by_user_id = {$uid})";
+}
+
+function project_card_truncate(string $text, int $max = 72): string {
+    $text = preg_replace('/\s+/', ' ', trim($text)) ?? '';
+    if (function_exists('mb_strlen') && function_exists('mb_substr')) {
+        if (mb_strlen($text) <= $max) {
+            return $text;
+        }
+        return rtrim(mb_substr($text, 0, $max - 1)) . '…';
+    }
+    if (strlen($text) <= $max) {
+        return $text;
+    }
+    return rtrim(substr($text, 0, $max - 1)) . '…';
+}
+
+function project_card_format_date(?int $ts): string {
+    if (!$ts) {
+        return '';
+    }
+    return date('M j, Y', $ts);
+}
+
+$projects = project_card_query_projects($mysqli, $userId, true);
+if ($projects === null) {
+    // Production may not have migration 0013 yet (description column).
+    $projects = project_card_query_projects($mysqli, $userId, false) ?? [];
+    foreach ($projects as &$projectRow) {
+        $projectRow['description'] = $projectRow['description'] ?? null;
+    }
+    unset($projectRow);
+}
 
 $projectIds = array_map(static fn($p) => (int)$p['id'], $projects);
 $membersByProject = [];
 $statsByProject = [];
 
 if ($projectIds) {
-    $idList = implode(',', $projectIds);
-    $memberSql = "SELECT pm.project_id, COALESCE(u.name, '') AS name, COALESCE(u.email, '') AS email
-                  FROM project_members pm
-                  LEFT JOIN users u ON u.id = pm.user_id
-                  WHERE pm.project_id IN ({$idList})
-                  ORDER BY pm.project_id, pm.role, u.name, u.email";
-    $memberRows = $mysqli->query($memberSql)->fetch_all(MYSQLI_ASSOC);
+    $idList = implode(',', array_map('intval', $projectIds));
+    $memberResult = $mysqli->query(
+        "SELECT pm.project_id, COALESCE(u.name, '') AS name, COALESCE(u.email, '') AS email
+         FROM project_members pm
+         LEFT JOIN users u ON u.id = pm.user_id
+         WHERE pm.project_id IN ({$idList})
+         ORDER BY pm.project_id, pm.role, u.name, u.email"
+    );
+    $memberRows = $memberResult ? $memberResult->fetch_all(MYSQLI_ASSOC) : [];
     foreach ($memberRows as $row) {
         $pid = (int)$row['project_id'];
         $label = user_display_name($row['name'], $row['email']);
@@ -48,26 +117,35 @@ if ($projectIds) {
         $membersByProject[$pid][] = $label;
     }
 
-    $completedList = "'" . implode("','", $completedStatuses) . "'";
+    $completedList = "'" . implode("','", array_map(
+        static fn($s) => db_escape($mysqli, $s),
+        $completedStatuses
+    )) . "'";
+
     foreach ($projectIds as $pid) {
-        $vis = permissions_item_visibility_clause($mysqli, $pid, $userId);
-        $statsSql = "SELECT
-                        SUM(CASE WHEN s.name IN ({$completedList}) THEN 1 ELSE 0 END) AS completed,
-                        SUM(CASE WHEN s.name IS NULL OR s.name NOT IN ({$completedList}) THEN 1 ELSE 0 END) AS outstanding,
-                        MAX(i.updated_at) AS last_updated_at
-                     FROM items i
-                     LEFT JOIN statuses s ON s.id = i.status_id
-                     WHERE i.project_id = {$pid} AND ({$vis})";
-        $stats = $mysqli->query($statsSql)->fetch_assoc() ?: [];
+        $pid = (int)$pid;
+        $vis = project_card_visibility_clause($mysqli, $pid, $userId);
+        $statsResult = $mysqli->query(
+            "SELECT
+                SUM(CASE WHEN s.name IN ({$completedList}) THEN 1 ELSE 0 END) AS completed,
+                SUM(CASE WHEN s.name IS NULL OR s.name NOT IN ({$completedList}) THEN 1 ELSE 0 END) AS outstanding,
+                MAX(i.updated_at) AS last_updated_at
+             FROM items i
+             LEFT JOIN statuses s ON s.id = i.status_id
+             WHERE i.project_id = {$pid} AND ({$vis})"
+        );
+        $stats = $statsResult ? ($statsResult->fetch_assoc() ?: []) : [];
         $lastText = null;
         $lastAt = !empty($stats['last_updated_at']) ? (int)$stats['last_updated_at'] : null;
         if ($lastAt) {
-            $lastSql = "SELECT i.item_text
-                        FROM items i
-                        WHERE i.project_id = {$pid} AND ({$vis}) AND i.updated_at = {$lastAt}
-                        ORDER BY i.id DESC
-                        LIMIT 1";
-            $lastRow = $mysqli->query($lastSql)->fetch_assoc();
+            $lastResult = $mysqli->query(
+                "SELECT i.item_text
+                 FROM items i
+                 WHERE i.project_id = {$pid} AND ({$vis}) AND i.updated_at = {$lastAt}
+                 ORDER BY i.id DESC
+                 LIMIT 1"
+            );
+            $lastRow = $lastResult ? $lastResult->fetch_assoc() : null;
             $lastText = $lastRow['item_text'] ?? null;
         }
         $statsByProject[$pid] = [
@@ -77,21 +155,6 @@ if ($projectIds) {
             'last_item_text' => $lastText,
         ];
     }
-}
-
-function project_card_truncate(string $text, int $max = 72): string {
-    $text = preg_replace('/\s+/', ' ', trim($text)) ?? '';
-    if (mb_strlen($text) <= $max) {
-        return $text;
-    }
-    return rtrim(mb_substr($text, 0, $max - 1)) . '…';
-}
-
-function project_card_format_date(?int $ts): string {
-    if (!$ts) {
-        return '';
-    }
-    return date('M j, Y', $ts);
 }
 
 ob_start();
@@ -150,9 +213,8 @@ ob_start();
                 <span class="project-card-updated">No tasks yet</span>
               <?php endif; ?>
               <?php if ($members): ?>
-                <div   class="label">Members</div>
+                <div class="label">Members</div>
                 <span class="project-card-members">
-              
                   <?php foreach ($members as $memberLabel): ?>
                     <span class="project-card-member-pill"><?= htmlspecialchars($memberLabel) ?></span>
                   <?php endforeach; ?>
