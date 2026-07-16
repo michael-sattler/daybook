@@ -224,15 +224,15 @@ ob_start();
                 <span><?= $done ?> done</span>
               </span>
               <?php if ($lastAt && $lastText !== ''): ?>
-                <span class="label">Updated</span>
+                <span class="label">Last Change</span>
                 <span class="project-card-updated" title="<?= htmlspecialchars($lastText) ?>">
-                  <?= htmlspecialchars(project_card_format_date($lastAt)) ?>:
+                  <?= htmlspecialchars(project_card_format_date($lastAt)) ?>
                 </span>
               <?php elseif ($lastAt): ?>
-                <div class="label">Updated</div>
+                <div class="label">Last Change</div>
                 <span class="project-card-updated"><?= htmlspecialchars(project_card_format_date($lastAt)) ?></span>
               <?php else: ?>
-                <div class="label">Updated</div>
+                <div class="label">Last Change</div>
                 <span class="project-card-updated">No tasks yet</span>
               <?php endif; ?>
               <?php if ($members): ?>
