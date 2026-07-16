@@ -75,16 +75,34 @@ if ($method === 'POST') {
         [$bg, $text] = PASTEL_ROYGBIV_PALETTE[$count % count(PASTEL_ROYGBIV_PALETTE)];
     }
 
+    $description = trim((string)($body['description'] ?? ''));
+    if (strlen($description) > 2000) {
+        fail('Description must be 2000 characters or fewer');
+    }
+    if ($description === '') {
+        $description = null;
+    }
+
     $slug = unique_project_slug($mysqli, slugify($name));
     $sortOrder = $maxOrder + 1;
     $now = time();
 
     $stmt = $mysqli->prepare(
-        'INSERT INTO projects (name, slug, owner_user_id, sort_order, bg_color, text_color, created_at)
-         VALUES (?,?,?,?,?,?,?)'
+        'INSERT INTO projects (name, description, slug, owner_user_id, sort_order, bg_color, text_color, created_at)
+         VALUES (?,?,?,?,?,?,?,?)'
     );
-    $stmt->bind_param('ssiissi', $name, $slug, $userId, $sortOrder, $bg, $text, $now);
-    $stmt->execute();
+    if ($stmt) {
+        $stmt->bind_param('sssisssi', $name, $description, $slug, $userId, $sortOrder, $bg, $text, $now);
+        $stmt->execute();
+    } else {
+        // Fallback when description column is not migrated yet.
+        $stmt = $mysqli->prepare(
+            'INSERT INTO projects (name, slug, owner_user_id, sort_order, bg_color, text_color, created_at)
+             VALUES (?,?,?,?,?,?,?)'
+        );
+        $stmt->bind_param('ssiissi', $name, $slug, $userId, $sortOrder, $bg, $text, $now);
+        $stmt->execute();
+    }
     $id = (int)$mysqli->insert_id;
 
     $role = 'admin';

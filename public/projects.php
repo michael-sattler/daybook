@@ -84,6 +84,27 @@ function project_card_format_date(?int $ts): string {
     return date('M j, Y', $ts);
 }
 
+function projects_page_can_create(mysqli $mysqli): bool {
+    if (is_daybookstaff()) {
+        return true;
+    }
+    $uid = (int)current_user_id();
+    if (!$uid) {
+        return false;
+    }
+    $adminResult = $mysqli->query(
+        "SELECT 1 FROM project_members WHERE user_id = {$uid} AND role = 'admin' LIMIT 1"
+    );
+    if ($adminResult && $adminResult->fetch_row()) {
+        return true;
+    }
+    $countResult = $mysqli->query(
+        "SELECT COUNT(*) AS c FROM project_members WHERE user_id = {$uid}"
+    );
+    $countRow = $countResult ? $countResult->fetch_assoc() : null;
+    return (int)($countRow['c'] ?? 0) === 0;
+}
+
 $projects = project_card_query_projects($mysqli, $userId, true);
 if ($projects === null) {
     // Production may not have migration 0013 yet (description column).
@@ -157,11 +178,13 @@ if ($projectIds) {
     }
 }
 
+$canCreateProject = projects_page_can_create($mysqli);
+
 ob_start();
 ?>
   <div class="projects-page">
     <h1>All Projects</h1>
-    <?php if (empty($projects)): ?>
+    <?php if (empty($projects) && !$canCreateProject): ?>
       <p class="projects-empty">You don’t have access to any projects yet.</p>
     <?php else: ?>
       <div class="project-card-grid">
@@ -227,10 +250,56 @@ ob_start();
             </span>
           </a>
         <?php endforeach; ?>
+        <?php if ($canCreateProject): ?>
+          <button type="button" id="create-project-card" class="project-card project-card-create">
+            <span class="project-card-create-label">Create a project</span>
+          </button>
+        <?php endif; ?>
       </div>
     <?php endif; ?>
   </div>
+
+  <?php if ($canCreateProject): ?>
+  <div id="create-project-modal" class="modal-overlay hidden">
+    <div class="modal-box modal-wide">
+      <h2>Create a project</h2>
+      <form id="create-project-form" class="project-details-form">
+        <label for="create-project-name">Name</label>
+        <input type="text" id="create-project-name" maxlength="255" required autocomplete="off">
+
+        <label for="create-project-description">Description</label>
+        <textarea id="create-project-description" rows="3" maxlength="2000" placeholder="Short description for the All Projects page..."></textarea>
+
+        <label>Background color</label>
+        <div id="create-project-bg-swatches" class="color-swatch-grid"></div>
+        <input type="color" id="create-project-bg" value="#ffd6d6">
+
+        <label>Text color</label>
+        <div id="create-project-text-swatches" class="color-swatch-grid"></div>
+        <input type="color" id="create-project-text" value="#7a2e2e">
+
+        <label>Preview</label>
+        <div id="create-project-preview" class="create-project-preview">
+          <span class="create-project-preview-name">Project name</span>
+          <span class="create-project-preview-desc">Description preview</span>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" id="create-project-cancel">Cancel</button>
+          <button type="submit" id="create-project-submit" class="primary">Create project</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div id="toast" class="toast hidden"></div>
+  <?php endif; ?>
 <?php
 $content = ob_get_clean();
 $pageTitle = 'All Projects - Daybook';
+$pageScripts = '';
+if ($canCreateProject) {
+    $pageScripts = '<script src="/assets/js/projects-page.js?v='
+        . filemtime(__DIR__ . '/assets/js/projects-page.js')
+        . '"></script>';
+}
 include __DIR__ . '/elements/layout.php';

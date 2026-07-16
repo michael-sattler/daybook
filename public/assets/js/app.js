@@ -641,6 +641,10 @@
   }
 
   function closeUserMenu() {
+    if (window.DaybookTopbar && typeof window.DaybookTopbar.closeUserMenu === 'function') {
+      window.DaybookTopbar.closeUserMenu();
+      return;
+    }
     const menu = document.getElementById('user-menu-dropdown');
     const toggle = document.getElementById('user-menu-toggle');
     if (menu) menu.classList.add('hidden');
@@ -677,6 +681,10 @@
   }
 
   function toggleUserMenu() {
+    if (window.DaybookTopbar && typeof window.DaybookTopbar.toggleUserMenu === 'function') {
+      window.DaybookTopbar.toggleUserMenu();
+      return;
+    }
     const menu = document.getElementById('user-menu-dropdown');
     const toggle = document.getElementById('user-menu-toggle');
     if (!menu || !toggle) return;
@@ -974,24 +982,13 @@
     });
     document.addEventListener('click', (e) => {
       if (!e.target.closest('#project-strip')) closeProjectStripMenu();
-      if (!e.target.closest('#user-menu')) closeUserMenu();
       if (!e.target.closest('#filterbar-config')) closeFilterConfigMenu();
     });
 
-    const userMenuToggle = document.getElementById('user-menu-toggle');
-    if (userMenuToggle) {
-      userMenuToggle.addEventListener('click', (e) => {
-        e.stopPropagation();
-        toggleUserMenu();
-      });
-    }
-    const userMenuProjects = document.getElementById('user-menu-projects');
-    if (userMenuProjects) {
-      userMenuProjects.addEventListener('click', () => {
-        closeUserMenu();
-        openOptionModal('projects');
-      });
-    }
+    window.openDaybookProjectsManager = () => {
+      closeUserMenu();
+      openOptionModal('projects');
+    };
 
     window.addEventListener('popstate', async () => {
       const match = window.location.pathname.match(/^\/projects\/([a-z0-9-]+)\/?$/);

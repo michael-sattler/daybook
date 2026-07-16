@@ -678,6 +678,55 @@ body.login-page {
   border: 1px solid currentColor;
   line-height: 1.2;
 }
+.project-card-create {
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--muted);
+  border: 2px dashed #9aa3af;
+  box-shadow: none;
+  cursor: pointer;
+  font: inherit;
+  width: 100%;
+}
+.project-card-create:hover {
+  transform: translateY(-2px);
+  box-shadow: none;
+  color: var(--text);
+  border-color: var(--accent);
+  background: rgba(255, 255, 255, 0.45);
+}
+.project-card-create-label {
+  font-size: 15px;
+  font-weight: 600;
+}
+.create-project-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 88px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+.create-project-preview-name {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.create-project-preview-desc {
+  font-size: 13px;
+  line-height: 1.35;
+  opacity: 0.9;
+}
+.project-details-form input[type="color"] {
+  width: 48px;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  background: #fff;
+  cursor: pointer;
+}
 
 .account-page { max-width: 480px; margin: 24px auto; padding: 0 16px; }
 .account-section { margin-bottom: 28px; }
