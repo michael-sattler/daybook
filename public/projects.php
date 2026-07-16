@@ -224,9 +224,9 @@ ob_start();
                 <span><?= $done ?> done</span>
               </span>
               <?php if ($lastAt && $lastText !== ''): ?>
+                <span class="label">Updated</span>
                 <span class="project-card-updated" title="<?= htmlspecialchars($lastText) ?>">
-                  <span class="label">Updated</span> <?= htmlspecialchars(project_card_format_date($lastAt)) ?>:
-                  <?= htmlspecialchars(project_card_truncate($lastText)) ?>
+                  <?= htmlspecialchars(project_card_format_date($lastAt)) ?>:
                 </span>
               <?php elseif ($lastAt): ?>
                 <div class="label">Updated</div>
@@ -252,6 +252,7 @@ ob_start();
         <?php endforeach; ?>
         <?php if ($canCreateProject): ?>
           <button type="button" id="create-project-card" class="project-card project-card-create">
+            <div class="" style=";opacity: 0.7;font-size: 5rem;"><i class="fa-solid fa-plus"></i></div>
             <span class="project-card-create-label">Create a project</span>
           </button>
         <?php endif; ?>
