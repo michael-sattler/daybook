@@ -12,7 +12,7 @@ $userId = current_user_id();
 
 function project_row(mysqli $mysqli, int $id): ?array {
     $stmt = $mysqli->prepare(
-        'SELECT p.id, p.name, p.slug, p.sort_order, p.bg_color, p.text_color, p.owner_user_id,
+        'SELECT p.id, p.name, p.description, p.slug, p.sort_order, p.bg_color, p.text_color, p.owner_user_id,
                 pm.role AS my_role
          FROM projects p
          LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ?
@@ -31,7 +31,7 @@ function project_row(mysqli $mysqli, int $id): ?array {
 
 if ($method === 'GET') {
     if (is_daybookstaff()) {
-        $sql = 'SELECT p.id, p.name, p.slug, p.sort_order, p.bg_color, p.text_color, p.owner_user_id,
+        $sql = 'SELECT p.id, p.name, p.description, p.slug, p.sort_order, p.bg_color, p.text_color, p.owner_user_id,
                        pm.role AS my_role
                 FROM projects p
                 LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ?
@@ -39,7 +39,7 @@ if ($method === 'GET') {
         $stmt = $mysqli->prepare($sql);
         $stmt->bind_param('i', $userId);
     } else {
-        $sql = 'SELECT p.id, p.name, p.slug, p.sort_order, p.bg_color, p.text_color, p.owner_user_id,
+        $sql = 'SELECT p.id, p.name, p.description, p.slug, p.sort_order, p.bg_color, p.text_color, p.owner_user_id,
                        pm.role AS my_role
                 FROM projects p
                 INNER JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ?
@@ -119,6 +119,15 @@ if ($method === 'PUT') {
         $sets[] = 'slug = ?';
         $types .= 's';
         $params[] = $slug;
+    }
+    if (array_key_exists('description', $body)) {
+        $description = trim((string)$body['description']);
+        if (strlen($description) > 2000) {
+            fail('Description must be 2000 characters or fewer');
+        }
+        $sets[] = 'description = ?';
+        $types .= 's';
+        $params[] = $description === '' ? null : $description;
     }
     if (array_key_exists('bg_color', $body)) { $sets[] = 'bg_color = ?'; $types .= 's'; $params[] = $body['bg_color'] ?: null; }
     if (array_key_exists('text_color', $body)) { $sets[] = 'text_color = ?'; $types .= 's'; $params[] = $body['text_color'] ?: null; }

@@ -261,6 +261,7 @@
       if (el) el.classList.toggle('hidden', !show);
     };
     setVisible('add-item-btn', !!caps.can_create_item);
+    setVisible('manage-details-btn', !!caps.can_edit_project);
     setVisible('manage-categories-btn', !!caps.can_edit_metadata);
     setVisible('manage-subsystems-btn', !!caps.can_edit_metadata);
     setVisible('manage-priorities-btn', !!caps.can_edit_metadata);
@@ -1071,6 +1072,10 @@
       closeFilterConfigMenu();
       openMembersModal();
     });
+    document.getElementById('manage-details-btn').addEventListener('click', () => {
+      closeFilterConfigMenu();
+      openProjectDetailsModal();
+    });
     document.getElementById('export-btn').addEventListener('click', () => {
       window.location.href = `/api/export?project_id=${state.currentProjectId}`;
     });
@@ -1079,6 +1084,9 @@
     document.getElementById('members-modal-close').addEventListener('click', closeMembersModal);
     document.getElementById('invite-form').addEventListener('submit', submitInvite);
     document.getElementById('copy-invite-link').addEventListener('click', copyInviteLink);
+
+    document.getElementById('project-details-form').addEventListener('submit', saveProjectDetails);
+    document.getElementById('project-details-cancel').addEventListener('click', closeProjectDetailsModal);
 
     document.getElementById('due-date-form').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -1410,6 +1418,51 @@
   function closeDetailModal() {
     document.getElementById('detail-modal').classList.add('hidden');
     state.detailItemId = null;
+  }
+
+  // ---------- project details modal ----------
+
+  function openProjectDetailsModal() {
+    const project = findProject(state.currentProjectId);
+    if (!project) return;
+    document.getElementById('project-details-name').value = project.name || '';
+    document.getElementById('project-details-description').value = project.description || '';
+    document.getElementById('project-details-modal').classList.remove('hidden');
+    document.getElementById('project-details-name').focus();
+  }
+
+  function closeProjectDetailsModal() {
+    document.getElementById('project-details-modal').classList.add('hidden');
+  }
+
+  async function saveProjectDetails(e) {
+    e.preventDefault();
+    const project = findProject(state.currentProjectId);
+    if (!project) return;
+    const name = document.getElementById('project-details-name').value.trim();
+    const description = document.getElementById('project-details-description').value.trim();
+    if (!name) {
+      toast('Title is required', true);
+      return;
+    }
+    try {
+      const updated = await put('/api/projects', {
+        id: project.id,
+        name,
+        description,
+      });
+      if (updated && updated.id) {
+        const idx = state.projects.findIndex((p) => sameId(p.id, project.id));
+        if (idx !== -1) state.projects[idx] = { ...state.projects[idx], ...updated };
+        setProjectCookie(updated);
+        renderProjectStrip();
+        if (updated.slug) navigateToProject(updated, { replace: true });
+      }
+      closeProjectDetailsModal();
+      toast('Saved');
+    } catch (err) {
+      toast(err.message, true);
+    }
   }
 
   // ---------- members modal ----------

@@ -5,6 +5,7 @@
     <span class="">Lightweight task management for development projects</span>
     </div>
   <div class="topbar-controls">
+    <a href="/projects" class="topbar-nav-link">All Projects</a>
     <div class="user-menu" id="user-menu">
       <button type="button" id="user-menu-toggle" class="user-menu-toggle" aria-expanded="false" aria-haspopup="menu" aria-label="Account menu">
         <span class="user-menu-avatar" aria-hidden="true"><?= htmlspecialchars($userInitial) ?></span>

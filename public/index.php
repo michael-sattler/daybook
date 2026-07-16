@@ -46,6 +46,7 @@ ob_start();
         Project Settings <span class="config-pill-chevron" aria-hidden="true">▾</span>
       </button>
       <ul id="filter-config-menu" class="filter-config-menu hidden" role="menu">
+        <li role="none"><button type="button" id="manage-details-btn" class="filter-config-option hidden" role="menuitem">Project Details</button></li>
         <li role="none"><button type="button" id="manage-members-btn" class="filter-config-option hidden" role="menuitem">Members</button></li>
         <li role="none"><button type="button" id="manage-categories-btn" class="filter-config-option" role="menuitem">Categories</button></li>
         <li role="none"><button type="button" id="manage-subsystems-btn" class="filter-config-option" role="menuitem">Subsystems</button></li>
@@ -100,6 +101,23 @@ ob_start();
     <div class="modal-actions">
       <button id="option-modal-close" class="primary">Done</button>
     </div>
+  </div>
+</div>
+
+<!-- Project details modal (title + description) -->
+<div id="project-details-modal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <h2>Project Details</h2>
+    <form id="project-details-form" class="project-details-form">
+      <label for="project-details-name">Title</label>
+      <input type="text" id="project-details-name" maxlength="255" required autocomplete="off">
+      <label for="project-details-description">Description</label>
+      <textarea id="project-details-description" rows="4" maxlength="2000" placeholder="Short description for the All Projects page..."></textarea>
+      <div class="modal-actions">
+        <button type="button" id="project-details-cancel">Cancel</button>
+        <button type="submit" class="primary">Save</button>
+      </div>
+    </form>
   </div>
 </div>
 
