@@ -499,7 +499,7 @@ ul.docs-list li a { flex: 1; word-break: break-all; }
 }
 .color-swatch-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(20, 1fr);
   gap: 4px;
 }
 .color-swatch {
