@@ -183,17 +183,34 @@ $canCreateProject = projects_page_can_create($mysqli);
 ob_start();
 ?>
   <div class="projects-page">
-    <h1>All Projects</h1>
+    <div class="projects-page-header">
+      <h1>All Projects</h1>
+      <?php if (!empty($projects)): ?>
+        <div class="projects-sort-tabs" role="tablist" aria-label="Sort projects">
+          <button type="button" class="projects-sort-tab active" role="tab" aria-selected="true" data-sort="updated">
+            Last updated
+          </button>
+          <button type="button" class="projects-sort-tab" role="tab" aria-selected="false" data-sort="name">
+            Project Name
+          </button>
+        </div>
+      <?php endif; ?>
+    </div>
     <?php if (empty($projects) && !$canCreateProject): ?>
       <p class="projects-empty">You don’t have access to any projects yet.</p>
     <?php else: ?>
-      <div class="project-card-grid">
+      <div class="project-card-grid" id="project-card-grid">
         <?php foreach ($projects as $project):
             $pid = (int)$project['id'];
             $bg = $project['bg_color'] ?: '#e5e7eb';
             $text = $project['text_color'] ?: '#111827';
             $slug = htmlspecialchars($project['slug'] ?? '', ENT_QUOTES);
             $name = htmlspecialchars($project['name'] ?? '');
+            $rawName = (string)($project['name'] ?? '');
+            $nameSortKey = function_exists('mb_strtolower')
+                ? mb_strtolower($rawName, 'UTF-8')
+                : strtolower($rawName);
+            $nameSort = htmlspecialchars($nameSortKey, ENT_QUOTES);
             $description = trim((string)($project['description'] ?? ''));
             $role = $project['my_role'] ?? null;
             $stats = $statsByProject[$pid] ?? [
@@ -209,6 +226,8 @@ ob_start();
             $lastText = trim((string)($stats['last_item_text'] ?? ''));
             ?>
           <a class="project-card" href="/projects/<?= $slug ?>"
+             data-name="<?= $nameSort ?>"
+             data-updated="<?= $lastAt ? (int)$lastAt : 0 ?>"
              style="background: <?= htmlspecialchars($bg) ?>; color: <?= htmlspecialchars($text) ?>">
             <span class="project-card-body">
               <span class="project-card-name"><?= $name ?></span>
@@ -298,7 +317,7 @@ ob_start();
 $content = ob_get_clean();
 $pageTitle = 'All Projects - Daybook';
 $pageScripts = '';
-if ($canCreateProject) {
+if (!empty($projects) || $canCreateProject) {
     $pageScripts = '<script src="/assets/js/projects-page.js?v='
         . filemtime(__DIR__ . '/assets/js/projects-page.js')
         . '"></script>';

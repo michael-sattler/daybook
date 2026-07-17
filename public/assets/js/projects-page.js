@@ -1,7 +1,8 @@
-/* Create-project widget on /projects */
+/* All Projects page: sort tabs + create-project modal */
 (function () {
   'use strict';
 
+  const SORT_STORAGE_KEY = 'daybook.projects.sort';
   const COLOR_SWATCHES = [
     '#ffffff', '#f3f4f6', '#e5e7eb', '#9ca3af', '#4b5563', '#1f2937', '#000000',
     '#fecaca', '#fca5a5', '#dc2626', '#7f1d1d',
@@ -120,7 +121,7 @@
     }
   }
 
-  function bind() {
+  function bindCreateModal() {
     const openBtn = $('create-project-card');
     if (!openBtn) return;
     openBtn.addEventListener('click', openModal);
@@ -138,6 +139,79 @@
         closeModal();
       }
     });
+  }
+
+  function readStoredSort() {
+    try {
+      const value = localStorage.getItem(SORT_STORAGE_KEY);
+      if (value === 'name' || value === 'updated') return value;
+    } catch (_) { /* ignore */ }
+    return 'updated';
+  }
+
+  function storeSort(sort) {
+    try {
+      localStorage.setItem(SORT_STORAGE_KEY, sort);
+    } catch (_) { /* ignore */ }
+  }
+
+  function sortProjectCards(sort) {
+    const grid = $('project-card-grid');
+    if (!grid) return;
+
+    const createCard = grid.querySelector('.project-card-create');
+    const cards = Array.from(grid.querySelectorAll('.project-card:not(.project-card-create)'));
+
+    cards.sort((a, b) => {
+      if (sort === 'name') {
+        const nameA = a.dataset.name || '';
+        const nameB = b.dataset.name || '';
+        const cmp = nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
+        if (cmp !== 0) return cmp;
+        return (a.dataset.updated || '0').localeCompare(b.dataset.updated || '0');
+      }
+      const updatedA = Number(a.dataset.updated || 0);
+      const updatedB = Number(b.dataset.updated || 0);
+      if (updatedB !== updatedA) return updatedB - updatedA;
+      const nameA = a.dataset.name || '';
+      const nameB = b.dataset.name || '';
+      return nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
+    });
+
+    cards.forEach((card) => grid.appendChild(card));
+    if (createCard) grid.appendChild(createCard);
+  }
+
+  function setActiveSortTab(sort) {
+    document.querySelectorAll('.projects-sort-tab').forEach((tab) => {
+      const isActive = tab.dataset.sort === sort;
+      tab.classList.toggle('active', isActive);
+      tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+  }
+
+  function bindSortTabs() {
+    const tabs = document.querySelectorAll('.projects-sort-tab');
+    if (!tabs.length) return;
+
+    const initial = readStoredSort();
+    setActiveSortTab(initial);
+    sortProjectCards(initial);
+
+    tabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const sort = tab.dataset.sort;
+        if (sort !== 'name' && sort !== 'updated') return;
+        setActiveSortTab(sort);
+        storeSort(sort);
+        sortProjectCards(sort);
+      });
+    });
+  }
+
+  function bind() {
+    bindSortTabs();
+    bindCreateModal();
   }
 
   if (document.readyState === 'loading') {
