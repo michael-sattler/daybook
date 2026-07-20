@@ -3,6 +3,7 @@
   'use strict';
 
   const SORT_STORAGE_KEY = 'daybook.projects.sort';
+  const ARCHIVED_STORAGE_KEY = 'daybook.projects.includeArchived';
   const COLOR_SWATCHES = [
     '#ffffff', '#f3f4f6', '#e5e7eb', '#9ca3af', '#4b5563', '#1f2937', '#000000',
     '#fecaca', '#fca5a5', '#dc2626', '#7f1d1d',
@@ -190,6 +191,42 @@
     });
   }
 
+  function readStoredIncludeArchived() {
+    try {
+      return localStorage.getItem(ARCHIVED_STORAGE_KEY) === '1';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function storeIncludeArchived(include) {
+    try {
+      localStorage.setItem(ARCHIVED_STORAGE_KEY, include ? '1' : '0');
+    } catch (_) { /* ignore */ }
+  }
+
+  function applyArchivedFilter(includeArchived) {
+    const grid = $('project-card-grid');
+    if (!grid) return;
+    grid.querySelectorAll('.project-card:not(.project-card-create)').forEach((card) => {
+      const isArchived = card.dataset.archived === '1';
+      card.hidden = isArchived && !includeArchived;
+    });
+  }
+
+  function bindIncludeArchivedToggle() {
+    const toggle = $('include-archived-toggle');
+    if (!toggle) return;
+    const initial = readStoredIncludeArchived();
+    toggle.checked = initial;
+    applyArchivedFilter(initial);
+    toggle.addEventListener('change', () => {
+      const include = !!toggle.checked;
+      storeIncludeArchived(include);
+      applyArchivedFilter(include);
+    });
+  }
+
   function bindSortTabs() {
     const tabs = document.querySelectorAll('.projects-sort-tab');
     if (!tabs.length) return;
@@ -210,6 +247,7 @@
   }
 
   function bind() {
+    bindIncludeArchivedToggle();
     bindSortTabs();
     bindCreateModal();
   }

@@ -113,6 +113,10 @@ ob_start();
       <input type="text" id="project-details-name" maxlength="255" required autocomplete="off">
       <label for="project-details-description">Description</label>
       <textarea id="project-details-description" rows="4" maxlength="2000" placeholder="Short description for the All Projects page..."></textarea>
+      <label class="project-details-archived">
+        <input type="checkbox" id="project-details-archived">
+        <span>Archived</span>
+      </label>
       <div class="modal-actions">
         <button type="button" id="project-details-cancel">Cancel</button>
         <button type="submit" class="primary">Save</button>

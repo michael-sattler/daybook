@@ -458,6 +458,21 @@ table#items-table tbody tr:hover { background: #f0f7ff; }
   resize: vertical;
   overflow: auto;
 }
+.project-details-archived {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--text) !important;
+  font-size: 13px !important;
+}
+.project-details-archived input {
+  width: auto;
+  margin: 0;
+  accent-color: var(--accent);
+}
 
 ul.option-list, ul.docs-list, ul.notes-list { list-style: none; margin: 0; padding: 0; }
 ul.option-list li, ul.docs-list li, ul.notes-list li {
@@ -573,6 +588,15 @@ body.login-page {
   justify-content: space-between;
   gap: 12px 20px;
   margin: 0 0 24px;
+}
+.projects-page-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 20px;
+}
+.projects-archived-toggle .filter-toggle-label {
+  font-size: 12px;
 }
 .projects-page h1 {
   margin: 0;
@@ -742,6 +766,24 @@ body.login-page {
 .project-card-create-label {
   font-size: 15px;
   font-weight: 600;
+}
+.project-card-archived {
+  opacity: 0.72;
+}
+.project-card-archived-badge {
+  align-self: flex-start;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.85;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  line-height: 1.2;
+}
+.project-card[hidden] {
+  display: none !important;
 }
 .create-project-preview {
   display: flex;

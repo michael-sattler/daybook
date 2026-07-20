@@ -9,16 +9,17 @@ $userId = (int)current_user_id();
 // Completed statuses match the task grid ("Show completed" / active_only).
 $completedStatuses = ['OK', 'N/A'];
 
-function project_card_query_projects(mysqli $mysqli, int $userId, bool $includeDescription): ?array {
+function project_card_query_projects(mysqli $mysqli, int $userId, bool $includeDescription, bool $includeArchivedCol): ?array {
     $descCol = $includeDescription ? 'p.description,' : '';
+    $archivedCol = $includeArchivedCol ? 'p.archived,' : '';
     if (is_daybookstaff()) {
-        $sql = "SELECT p.id, p.name, {$descCol} p.slug, p.sort_order, p.bg_color, p.text_color, p.owner_user_id,
+        $sql = "SELECT p.id, p.name, {$descCol} p.slug, p.sort_order, {$archivedCol} p.bg_color, p.text_color, p.owner_user_id,
                        pm.role AS my_role
                 FROM projects p
                 LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = {$userId}
                 ORDER BY p.sort_order, p.id";
     } else {
-        $sql = "SELECT p.id, p.name, {$descCol} p.slug, p.sort_order, p.bg_color, p.text_color, p.owner_user_id,
+        $sql = "SELECT p.id, p.name, {$descCol} p.slug, p.sort_order, {$archivedCol} p.bg_color, p.text_color, p.owner_user_id,
                        pm.role AS my_role
                 FROM projects p
                 INNER JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = {$userId}
@@ -105,15 +106,20 @@ function projects_page_can_create(mysqli $mysqli): bool {
     return (int)($countRow['c'] ?? 0) === 0;
 }
 
-$projects = project_card_query_projects($mysqli, $userId, true);
+$projects = project_card_query_projects($mysqli, $userId, true, true);
+if ($projects === null) {
+    // Production may not have migration 0014 yet (archived column).
+    $projects = project_card_query_projects($mysqli, $userId, true, false);
+}
 if ($projects === null) {
     // Production may not have migration 0013 yet (description column).
-    $projects = project_card_query_projects($mysqli, $userId, false) ?? [];
-    foreach ($projects as &$projectRow) {
-        $projectRow['description'] = $projectRow['description'] ?? null;
-    }
-    unset($projectRow);
+    $projects = project_card_query_projects($mysqli, $userId, false, false) ?? [];
 }
+foreach ($projects as &$projectRow) {
+    $projectRow['description'] = $projectRow['description'] ?? null;
+    $projectRow['archived'] = (int)($projectRow['archived'] ?? 0);
+}
+unset($projectRow);
 
 $projectIds = array_map(static fn($p) => (int)$p['id'], $projects);
 $membersByProject = [];
@@ -186,13 +192,20 @@ ob_start();
     <div class="projects-page-header">
       <h1>All Projects</h1>
       <?php if (!empty($projects)): ?>
-        <div class="projects-sort-tabs" role="tablist" aria-label="Sort projects">
-          <button type="button" class="projects-sort-tab active" role="tab" aria-selected="true" data-sort="updated">
-            Last updated
-          </button>
-          <button type="button" class="projects-sort-tab" role="tab" aria-selected="false" data-sort="name">
-            Project Name
-          </button>
+        <div class="projects-page-controls">
+          <label class="filter-toggle projects-archived-toggle">
+            <input type="checkbox" id="include-archived-toggle">
+            <span class="filter-toggle-track" aria-hidden="true"></span>
+            <span class="filter-toggle-label">Include Archived projects</span>
+          </label>
+          <div class="projects-sort-tabs" role="tablist" aria-label="Sort projects">
+            <button type="button" class="projects-sort-tab active" role="tab" aria-selected="true" data-sort="updated">
+              Last updated
+            </button>
+            <button type="button" class="projects-sort-tab" role="tab" aria-selected="false" data-sort="name">
+              Project Name
+            </button>
+          </div>
         </div>
       <?php endif; ?>
     </div>
@@ -224,13 +237,20 @@ ob_start();
             $done = (int)$stats['completed'];
             $lastAt = $stats['last_updated_at'];
             $lastText = trim((string)($stats['last_item_text'] ?? ''));
+            $isArchived = (int)($project['archived'] ?? 0) === 1;
+            $cardClass = 'project-card' . ($isArchived ? ' project-card-archived' : '');
             ?>
-          <a class="project-card" href="/projects/<?= $slug ?>"
+          <a class="<?= $cardClass ?>" href="/projects/<?= $slug ?>"
              data-name="<?= $nameSort ?>"
              data-updated="<?= $lastAt ? (int)$lastAt : 0 ?>"
+             data-archived="<?= $isArchived ? '1' : '0' ?>"
+             <?= $isArchived ? 'hidden' : '' ?>
              style="background: <?= htmlspecialchars($bg) ?>; color: <?= htmlspecialchars($text) ?>">
             <span class="project-card-body">
               <span class="project-card-name"><?= $name ?></span>
+              <?php if ($isArchived): ?>
+                <span class="project-card-archived-badge">Archived</span>
+              <?php endif; ?>
               <?php if ($description !== ''): ?>
                 <span class="project-card-description"><?= htmlspecialchars($description) ?></span>
               <?php endif; ?>

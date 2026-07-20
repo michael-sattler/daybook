@@ -10,48 +10,94 @@ require_login();
 $method = $_SERVER['REQUEST_METHOD'];
 $userId = current_user_id();
 
-function project_row(mysqli $mysqli, int $id): ?array {
-    $stmt = $mysqli->prepare(
-        'SELECT p.id, p.name, p.description, p.slug, p.sort_order, p.bg_color, p.text_color, p.owner_user_id,
-                pm.role AS my_role
-         FROM projects p
-         LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ?
-         WHERE p.id = ?'
-    );
-    $uid = current_user_id();
-    $stmt->bind_param('ii', $uid, $id);
-    $stmt->execute();
-    $row = $stmt->get_result()->fetch_assoc();
-    if (!$row) {
-        return null;
+function projects_select_cols(bool $withArchived): string {
+    $archived = $withArchived ? 'p.archived,' : '';
+    return "p.id, p.name, p.description, p.slug, p.sort_order, {$archived} p.bg_color, p.text_color, p.owner_user_id,
+                pm.role AS my_role";
+}
+
+function projects_normalize_row(array $row, int $uid): array {
+    if (!array_key_exists('archived', $row)) {
+        $row['archived'] = 0;
+    } else {
+        $row['archived'] = (int)$row['archived'];
     }
     $row['is_owner'] = (int)$row['owner_user_id'] === $uid;
     return $row;
 }
 
-if ($method === 'GET') {
-    if (is_daybookstaff()) {
-        $sql = 'SELECT p.id, p.name, p.description, p.slug, p.sort_order, p.bg_color, p.text_color, p.owner_user_id,
-                       pm.role AS my_role
-                FROM projects p
-                LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ?
-                ORDER BY p.sort_order, p.id';
-        $stmt = $mysqli->prepare($sql);
-        $stmt->bind_param('i', $userId);
+function project_row(mysqli $mysqli, int $id): ?array {
+    $uid = current_user_id();
+    $sqlWith = 'SELECT ' . projects_select_cols(true) . '
+         FROM projects p
+         LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ?
+         WHERE p.id = ?';
+    $stmt = $mysqli->prepare($sqlWith);
+    if ($stmt) {
+        $stmt->bind_param('ii', $uid, $id);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
     } else {
-        $sql = 'SELECT p.id, p.name, p.description, p.slug, p.sort_order, p.bg_color, p.text_color, p.owner_user_id,
-                       pm.role AS my_role
+        $stmt = $mysqli->prepare(
+            'SELECT ' . projects_select_cols(false) . '
+             FROM projects p
+             LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ?
+             WHERE p.id = ?'
+        );
+        $stmt->bind_param('ii', $uid, $id);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+    }
+    if (!$row) {
+        return null;
+    }
+    return projects_normalize_row($row, $uid);
+}
+
+if ($method === 'GET') {
+    $includeArchived = !empty($_GET['include_archived']);
+    $archivedFilter = $includeArchived ? '' : ' WHERE COALESCE(p.archived, 0) = 0';
+
+    if (is_daybookstaff()) {
+        $sqlWith = 'SELECT ' . projects_select_cols(true) . '
                 FROM projects p
-                INNER JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ?
+                LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ?'
+            . $archivedFilter . '
                 ORDER BY p.sort_order, p.id';
-        $stmt = $mysqli->prepare($sql);
-        $stmt->bind_param('i', $userId);
+        $stmt = $mysqli->prepare($sqlWith);
+        if ($stmt) {
+            $stmt->bind_param('i', $userId);
+        } else {
+            $sql = 'SELECT ' . projects_select_cols(false) . '
+                    FROM projects p
+                    LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ?
+                    ORDER BY p.sort_order, p.id';
+            $stmt = $mysqli->prepare($sql);
+            $stmt->bind_param('i', $userId);
+        }
+    } else {
+        $sqlWith = 'SELECT ' . projects_select_cols(true) . '
+                FROM projects p
+                INNER JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ?'
+            . ($includeArchived ? '' : ' AND COALESCE(p.archived, 0) = 0') . '
+                ORDER BY p.sort_order, p.id';
+        $stmt = $mysqli->prepare($sqlWith);
+        if ($stmt) {
+            $stmt->bind_param('i', $userId);
+        } else {
+            $sql = 'SELECT ' . projects_select_cols(false) . '
+                    FROM projects p
+                    INNER JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ?
+                    ORDER BY p.sort_order, p.id';
+            $stmt = $mysqli->prepare($sql);
+            $stmt->bind_param('i', $userId);
+        }
     }
     $stmt->execute();
     $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
     foreach ($rows as &$row) {
         $pid = (int)$row['id'];
-        $row['is_owner'] = (int)$row['owner_user_id'] === $userId;
+        $row = projects_normalize_row($row, $userId);
         $row['resolved_owner_user_id'] = permissions_project_owner_id($mysqli, $pid);
         $row['owner_name'] = permissions_project_owner_display_name($mysqli, $pid);
         $row['project_owner_assignee_label'] = permissions_project_owner_assignee_label($mysqli, $pid);
@@ -147,12 +193,21 @@ if ($method === 'PUT') {
         $types .= 's';
         $params[] = $description === '' ? null : $description;
     }
+    if (array_key_exists('archived', $body)) {
+        $archived = !empty($body['archived']) ? 1 : 0;
+        $sets[] = 'archived = ?';
+        $types .= 'i';
+        $params[] = $archived;
+    }
     if (array_key_exists('bg_color', $body)) { $sets[] = 'bg_color = ?'; $types .= 's'; $params[] = $body['bg_color'] ?: null; }
     if (array_key_exists('text_color', $body)) { $sets[] = 'text_color = ?'; $types .= 's'; $params[] = $body['text_color'] ?: null; }
     if (!$sets) fail('No editable fields supplied');
     $types .= 'i';
     $params[] = $id;
     $stmt = $mysqli->prepare('UPDATE projects SET ' . implode(', ', $sets) . ' WHERE id = ?');
+    if (!$stmt && array_key_exists('archived', $body)) {
+        fail('Archived column is not available; run migration 0014_project_archived.sql', 500);
+    }
     bind_dynamic($stmt, $types, $params);
     $stmt->execute();
 

@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS projects (
   slug VARCHAR(150) NOT NULL,
   owner_user_id INT NULL,
   sort_order INT NOT NULL DEFAULT 0,
+  archived TINYINT(1) NOT NULL DEFAULT 0,
   bg_color VARCHAR(7) NULL,
   text_color VARCHAR(7) NULL,
   created_at INT NOT NULL,

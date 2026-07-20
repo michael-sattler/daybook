@@ -23,6 +23,7 @@
 
   const state = {
     projects: [],
+    archivedViewProject: null,
     categories: [],
     subsystems: [],
     priorities: [],
@@ -55,7 +56,28 @@
   }
 
   function findProjectBySlug(slug) {
-    return slug && state.projects.find((p) => projectSlug(p) === slug);
+    if (!slug) return null;
+    return state.projects.find((p) => projectSlug(p) === slug)
+      || (state.archivedViewProject && projectSlug(state.archivedViewProject) === slug
+        ? state.archivedViewProject
+        : null);
+  }
+
+  function isProjectArchived(project) {
+    return !!project && Number(project.archived) === 1;
+  }
+
+  function activeProjects() {
+    return state.projects.filter((p) => !isProjectArchived(p));
+  }
+
+  function projectsForSelect(selectedId) {
+    const list = activeProjects().slice();
+    if (!selectedId) return list;
+    if (list.some((p) => sameId(p.id, selectedId))) return list;
+    const current = findProject(selectedId);
+    if (current) list.unshift(current);
+    return list;
   }
 
   // ---------- low-level fetch helpers ----------
@@ -130,12 +152,28 @@
     }
     const requestedSlug = window.INITIAL_PROJECT_SLUG || '';
     const cookieSlug = getProjectCookie();
-    const initialProject =
+    let initialProject =
       findProjectBySlug(requestedSlug)
       || findProjectBySlug(cookieSlug)
       || state.projects[0];
+
+    // Direct /projects/{slug} links to archived projects still open them.
+    if (requestedSlug && !findProjectBySlug(requestedSlug)) {
+      try {
+        const withArchived = await get('/api/projects?include_archived=1');
+        const match = (withArchived || []).find((p) => projectSlug(p) === requestedSlug);
+        if (match) {
+          state.archivedViewProject = match;
+          initialProject = match;
+        }
+      } catch (_) { /* ignore */ }
+    }
+
     state.currentProjectId = Number(initialProject.id);
-    setProjectCookie(initialProject);
+    if (!isProjectArchived(initialProject)) {
+      state.archivedViewProject = null;
+      setProjectCookie(initialProject);
+    }
     navigateToProject(initialProject, { replace: true });
     renderProjectStrip();
     await loadProjectScopedLists();
@@ -496,7 +534,10 @@
   }
 
   function findProject(id) {
-    return state.projects.find((p) => sameId(p.id, id));
+    return state.projects.find((p) => sameId(p.id, id))
+      || (state.archivedViewProject && sameId(state.archivedViewProject.id, id)
+        ? state.archivedViewProject
+        : null);
   }
 
   function slugifyName(name) {
@@ -529,7 +570,12 @@
     const project = findProject(projectId);
     if (!project) return;
     state.currentProjectId = Number(project.id);
-    setProjectCookie(project);
+    if (isProjectArchived(project)) {
+      state.archivedViewProject = project;
+    } else {
+      state.archivedViewProject = null;
+      setProjectCookie(project);
+    }
     closeProjectStripMenu();
     renderProjectStrip();
     navigateToProject(project);
@@ -596,7 +642,7 @@
       }
     }
 
-    menu.innerHTML = state.projects.map((p) => {
+    menu.innerHTML = activeProjects().map((p) => {
       const active = sameId(p.id, state.currentProjectId);
       const swatch = p.bg_color || '#e5e7eb';
       return `<li role="presentation"><button type="button" class="project-strip-option${active ? ' active' : ''}" data-project-id="${p.id}" role="option" aria-selected="${active}">
@@ -773,7 +819,7 @@
           <button type="button" class="icon-btn url-open-btn hidden" title="Open URL" aria-label="Open URL">↗</button>
         </div>
       </td>
-      <td class="col-project"><select data-field="project_id" ${fieldsEditable && caps.is_owner ? '' : 'disabled'}>${optionsHtml(state.projects, item.project_id, '')}</select></td>
+      <td class="col-project"><select data-field="project_id" ${fieldsEditable && caps.is_owner ? '' : 'disabled'}>${optionsHtml(projectsForSelect(item.project_id), item.project_id, '')}</select></td>
       <td class="col-priority"><select data-field="priority_id" ${fieldsEditable ? '' : 'disabled'}>${optionsHtml(state.priorities, item.priority_id)}</select></td>
       <td class="col-order">${state.orderBy === 'priority' && item.priority_id && reorderable ? '<span class="drag-handle" title="Drag to reorder">⠿</span> ' : ''}${item.order_in_priority || ''}</td>
       <td class="col-due">${dueDateCellHtml(item, fieldsEditable)}</td>
@@ -1424,6 +1470,7 @@
     if (!project) return;
     document.getElementById('project-details-name').value = project.name || '';
     document.getElementById('project-details-description').value = project.description || '';
+    document.getElementById('project-details-archived').checked = isProjectArchived(project);
     document.getElementById('project-details-modal').classList.remove('hidden');
     document.getElementById('project-details-name').focus();
   }
@@ -1438,6 +1485,7 @@
     if (!project) return;
     const name = document.getElementById('project-details-name').value.trim();
     const description = document.getElementById('project-details-description').value.trim();
+    const archived = document.getElementById('project-details-archived').checked;
     if (!name) {
       toast('Title is required', true);
       return;
@@ -1447,10 +1495,26 @@
         id: project.id,
         name,
         description,
+        archived: archived ? 1 : 0,
       });
       if (updated && updated.id) {
         const idx = state.projects.findIndex((p) => sameId(p.id, project.id));
+        if (isProjectArchived(updated)) {
+          if (idx !== -1) state.projects.splice(idx, 1);
+          state.archivedViewProject = updated;
+          closeProjectDetailsModal();
+          toast('Project archived');
+          const next = state.projects[0];
+          if (next) {
+            await switchProject(next.id);
+          } else {
+            window.location.href = '/projects';
+          }
+          return;
+        }
+        state.archivedViewProject = null;
         if (idx !== -1) state.projects[idx] = { ...state.projects[idx], ...updated };
+        else state.projects.push(updated);
         setProjectCookie(updated);
         renderProjectStrip();
         if (updated.slug) navigateToProject(updated, { replace: true });
